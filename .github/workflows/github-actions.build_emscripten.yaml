@@ -1,6 +1,9 @@
 name: Test building
 run-name: test building emscripten
-on: [push]
+on:
+  push:
+    branches:
+      - main
 permissions:
   contents: read
   pages: write
