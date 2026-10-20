@@ -31,12 +31,9 @@ add_link_options(-pthread -sPTHREAD_POOL_SIZE=7)
 endif()
 #add_compile_options( -msimd128)
 add_compile_options( -mbulk-memory )
-add_compile_options(  -sUSE_BOOST_HEADERS=1)
 
 add_link_options( -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=4294901760 )
-#add_link_options( -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=2147418112 )
-#add_compile_options(-g -gsource-map )
-#add_link_options(-g -gsource-map --source-map-base http://localhost:9000/ )
+
 if(CDX_ENABLE_ASSERT)
     add_compile_definitions(_LIBCPP_DEBUG=1)
 endif()

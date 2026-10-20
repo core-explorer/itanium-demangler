@@ -2,5 +2,5 @@
 #include "Grammar.hxx"
 
 namespace swartalf::itanium {
-std::flat_map<char, std::flat_set<ProductionType>> optimize(const ProductionGrammar& rules);
+std::unordered_map<char, std::unordered_set<ProductionType>> optimize(const ProductionGrammar& rules);
 }

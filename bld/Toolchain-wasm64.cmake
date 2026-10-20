@@ -23,12 +23,10 @@ set(CMAKE_AR ${EMAR})
 set(CMAKE_CXX_COMPILER_RANLIB ${EMRANLIB})
 set(CMAKE_RANLIB ${EMRANLIB})
 
-#add_compile_options( -msimd128 )
-add_compile_options( -mbulk-memory -sUSE_BOOST_HEADERS=1)
-#add_compile_options( -sMEMORY64)
+
+add_compile_options( -mbulk-memory )
 add_compile_options( --target=wasm64 -m64)
 add_link_options(-sASSERTIONS=1 -sWASM_BIGINT)
-#add_link_options( -sMEMORY64 -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=8589934592 -mwasm64 )
 add_link_options( -sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=131072000 -sMAXIMUM_MEMORY=4294901760 --target=wasm64 -m64 )
 
 if(CDX_ENABLE_ASSERT)

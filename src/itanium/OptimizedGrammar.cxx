@@ -183,11 +183,11 @@ std::set<char> propagate_possible_starts(const ProductionRule& rule, const std::
 	return result;
 }
 
-std::flat_map<char, std::flat_set<ProductionType>> optimize(const ProductionGrammar& rules) {
+std::unordered_map<char, std::unordered_set<ProductionType>> optimize(const ProductionGrammar& rules) {
 	std::map<ProductionType, std::set<char>> possible_start;
 	std::map<ProductionType, std::set<char>> possible_start1;
 
-	std::flat_map<char, std::flat_set<ProductionType>> possible_rules;
+	std::unordered_map<char, std::unordered_set<ProductionType>> possible_rules;
 
 	for (const auto& [k, v] : rules.rules) {
 		possible_start[k] = get_possible_starts(v);

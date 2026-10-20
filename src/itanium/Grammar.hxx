@@ -2,8 +2,8 @@
 #include "ItaniumOperatorType.hxx"
 #include "ProductionType.hxx"
 #include <array>
-#include <flat_map>
-#include <flat_set>
+#include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <string_view>
 #include <type_traits>
@@ -162,7 +162,7 @@ struct ProductionRule {
 
 struct ProductionGrammar {
 	std::map<ProductionType, ProductionRule> rules;
-	std::flat_map<char, std::flat_set<ProductionType>> lookup;
+	std::unordered_map<char, std::unordered_set<ProductionType>> lookup;
 
 	template <ProductionType pt, typename... Args>
 	void add_rule(Args&&... args) {
