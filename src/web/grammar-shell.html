@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en-us">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href='./favicon.svg' rel='icon' type='image/svg+xml'>
+    <link href='./favicon.svg' rel='shortcut icon' type='image/svg+xml'>
+
+    <title>C++ Itanium ABI Demangler</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="header" class="header">
+
+        <span style="font-weight:500">C++ Itanium ABI Demangler</span>
+        <span class="right"> <span class="version" id="version" style="visibility:hidden">v0</span> &nbsp;  <a href="./index.html">Demangler</a>&nbsp;<span id="source-span" style="visibility:hidden">View on&nbsp;<a class="usual" id="source-link" href=".">GitHub</a></span></span>
+    </div>
+    <div id="main">
+        <div id="mangledDiv">
+            
+
+            
+        </div>
+        <div id="demangledDiv">
+            <div id="grammar" name="grammar" >
+            </div>
+        </div>
+
+        <script>
+            var is_emscripten_initialized = 0;
+            var pending_demangle = null;
+            var darkmode = 0;
+            document.addEventListener('DOMContentLoaded', (event) => {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.body.classList.add('darkmode');
+                    darkmode = 1;
+                } else {
+                    document.body.classList.remove('darkmode');
+                    darkmode = 0;
+                }
+                if (is_emscripten_initialized == 1) {
+                    set_darkmode(darkmode);
+                }
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+                    if (event.matches) {
+                        document.body.classList.add('darkmode');
+                        darkmode = 1;
+                    } else {
+                        document.body.classList.remove('darkmode');
+                        darkmode = 0;
+                    }
+                    if (is_emscripten_initialized == 1) {
+                        set_darkmode(darkmode);
+                    }
+                });
+
+                    if (is_emscripten_initialized == 1) {  
+                        Module.showGrammar();
+                    } 
+            });
+
+                const container = document.getElementById('main');
+                const resizableBox = document.getElementById('grammar');
+
+                function setInitialSize() {
+                const parentWidth = container.clientWidth;
+                const parentHeight = container.clientHeight;
+
+                resizableBox.style.width = (parentWidth * 0.8) + 'px';
+                resizableBox.style.height = (parentHeight * 0.8) + 'px';
+                }
+
+                setInitialSize();
+
+            function set_darkmode(darkmode_value) {
+                if (is_emscripten_initialized == 1) {
+                    Module.setDarkMode(darkmode_value);
+                }
+            }
+
+
+
+        </script>
+        {{{ SCRIPT }}}
+
+</body>
+
+</html>

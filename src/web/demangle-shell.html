@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en-us">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href='./favicon.svg' rel='icon' type='image/svg+xml'>
+    <link href='./favicon.svg' rel='shortcut icon' type='image/svg+xml'>
+
+    <title>C++ Itanium ABI Demangler</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="header" class="header">
+
+        <span style="font-weight:500">C++ Itanium ABI Demangler</span>
+        <span class="right"> <span class="version" id="version" style="visibility:hidden">v0</span> &nbsp; <a href="./grammar.html">Grammar</a>&nbsp; <span id="source-span" style="visibility:hidden">View on&nbsp;<a class="usual" id="source-link" href=".">GitHub</a></span></span>
+    </div>
+    <div id="main">
+        <div id="mangledDiv">
+            <form class="mangling_form" id="mangling_form">
+                <label for="mangled">mangled name:</label>
+
+                <input type="text" maxLength="1000" size="80" style="width:80%" id="mangled" name="mangled">
+            </form>
+        </div>
+        <div id="demangledDiv">
+            <div id="demangled" name="demangled" style="
+  resize: both;
+  overflow: auto;
+  width: 400px;
+  height: 200px;
+  border: 1px solid #ccc;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+">
+            </div>
+        </div>
+
+        <script>
+            var is_emscripten_initialized = 0;
+            var pending_demangle = null;
+            var darkmode = 0;
+            document.addEventListener('DOMContentLoaded', (event) => {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.body.classList.add('darkmode');
+                    darkmode = 1;
+                } else {
+                    document.body.classList.remove('darkmode');
+                    darkmode = 0;
+                }
+                if (is_emscripten_initialized == 1) {
+                    set_darkmode(darkmode);
+                }
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+                    if (event.matches) {
+                        document.body.classList.add('darkmode');
+                        darkmode = 1;
+                    } else {
+                        document.body.classList.remove('darkmode');
+                        darkmode = 0;
+                    }
+                    if (is_emscripten_initialized == 1) {
+                        set_darkmode(darkmode);
+                    }
+                });
+
+                window.addEventListener('load', function() {
+                    let mangling_form = document.getElementById('mangling_form');
+                    mangling_form.reset();
+                    document.getElementById('demangled').value = '';
+
+                });
+                const urlParams = new URLSearchParams(window.location.search);
+                const mangled = urlParams.get('mangled');
+
+                const container = document.getElementById('main');
+                const resizableBox = document.getElementById('demangled');
+
+                function setInitialSize() {
+                    const parentWidth = container.clientWidth;
+                    const parentHeight = container.clientHeight;
+
+                    resizableBox.style.width = (parentWidth * 0.8) + 'px';
+                    resizableBox.style.height = (parentHeight * 0.5) + 'px';
+                }
+
+                setInitialSize();
+
+                if (mangled) {
+                    if (is_emscripten_initialized == 1) {
+                        document.getElementById('mangled').value = mangled;
+                        demangle_text(mangled);
+                    } else {
+                        pending_demangle = mangled;
+                    }
+
+                }
+
+            });
+
+            function set_darkmode(darkmode_value) {
+                if (is_emscripten_initialized == 1) {
+                    Module.setDarkMode(darkmode_value);
+                }
+            }
+
+            function demangle_text(mangled) {
+                console.log("demangle_text", mangled);
+                const mangledLength = lengthBytesUTF8(mangled) + 1;
+                const mangledPtr = _malloc(mangledLength);
+                stringToUTF8(mangled, mangledPtr, mangledLength);
+
+                Module.demangleText(mangledPtr, mangledLength - 1);
+                _free(mangledPtr);
+
+            }
+
+            const textarea = document.getElementById('demangled');
+            const display = document.getElementById('dimension-display');
+
+            function demangle() {
+                demangle_text(document.getElementById('mangled').value);
+            }
+            document.getElementById('mangled').addEventListener("input", demangle);
+
+            const measurer = document.createElement('span');
+            measurer.style.cssText = 'visibility: hidden; position: absolute;';
+            measurer.textContent = '0';
+            document.body.appendChild(measurer);
+            function getCharDimensions(element) {
+                const computed = window.getComputedStyle(element);
+                measurer.style.font = computed.font;
+                const charWidth = measurer.getBoundingClientRect().width;
+
+                let lineHeight = parseFloat(computed.lineHeight);
+                if (isNaN(lineHeight)) {
+                    lineHeight = parseFloat(computed.fontSize) * 1.2;
+                }
+
+                return { charWidth, lineHeight };
+            }
+
+            const observer = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    const wrapperWidth = entry.contentRect.width;
+                    const wrapperHeight = entry.contentRect.height;
+                    const computed = window.getComputedStyle(textarea);
+
+                    const paddingX = parseFloat(computed.paddingLeft) + parseFloat(computed.paddingRight);
+                    const paddingY = parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
+
+                    const contentWidth = wrapperWidth - paddingX;
+                    const contentHeight = wrapperHeight - paddingY;
+
+                    const {charWidth,lineHeight} = getCharDimensions(textarea);
+
+                    const cols = Math.floor(contentWidth / charWidth);
+                    const rows = Math.floor(contentHeight / lineHeight);
+
+                    if (is_emscripten_initialized == 1) {
+                        Module.setMaxLength(cols, rows);
+                        demangle_text(document.getElementById('mangled').value);
+                    }
+                }
+            });
+
+            observer.observe(textarea);
+        </script>
+        {{{ SCRIPT }}}
+
+</body>
+
+</html>
