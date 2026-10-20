@@ -46,6 +46,11 @@ if(NOT CDX_AFL OR CDX_AFL_BOTH)
 add_executable(itanium-demangle  demangle.cxx )
 settings(itanium-demangle)
 target_link_libraries(itanium-demangle PRIVATE  swartalf::filt swartalf::demangle swartalf::util swartalf::cli swartalf::version)
+
+install(TARGETS itanium-demangle
+    RUNTIME DESTINATION bin
+)
+
 endif()
 endif()
 
