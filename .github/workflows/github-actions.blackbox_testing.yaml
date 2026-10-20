@@ -14,5 +14,6 @@ jobs:
       - name: Compile with clang
         run: |
           cd ${{ github.workspace }}
+          sudo apt-get install libc++-dev
           ./compile.sh -c
       - run: echo "job status ${{ job.status }}."
