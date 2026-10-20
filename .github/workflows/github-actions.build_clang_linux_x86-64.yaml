@@ -2,15 +2,11 @@ name: Test building
 run-name: test building
 on: [push]
 jobs:
-  Github-Actions-Blackbox-Testing:
+  Github-Actions-Build-Clang:
     runs-on: ubuntu-26.04
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-      - name: Compile with gcc
-        run: |
-          cd ${{ github.workspace }}
-          ./compile.sh
       - name: Compile with clang
         run: |
           cd ${{ github.workspace }}
