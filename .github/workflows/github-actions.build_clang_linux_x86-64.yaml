@@ -1,5 +1,5 @@
 name: Test building
-run-name: test building
+run-name: test building clang
 on: [push]
 jobs:
   Github-Actions-Build-Clang:
