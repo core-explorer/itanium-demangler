@@ -96,7 +96,6 @@ bool SubstitutionTable::check_if_allowed(const ParseResult& res) {
 }
 
 bool SubstitutionTable::add_if_allowed(const ParseResult& res, const NestedTemplateParams& tp) {
-	
 	if (not check_if_allowed(res)) {
 		return false;
 	}
@@ -107,7 +106,6 @@ bool SubstitutionTable::add_if_allowed(const ParseResult& res, const NestedTempl
 		}
 	}
 
-	
 	entries.emplace_back(res);
 	mangled.emplace_back(mang);
 	stp.emplace_back(tp);
@@ -117,7 +115,6 @@ bool SubstitutionTable::add_if_allowed(const ParseResult& res, const NestedTempl
 void build_substitution_types(const ParseResult& res, SubstitutionTable& subs, const NestedTemplateParams& tp);
 
 void build_substitution_table(const ParseResult& res, SubstitutionTable& subs, const NestedTemplateParams& tp, bool primary) {
-	
 	switch (res.type) {
 	case ProductionType::type: {
 		if (not res.comps.empty()) {
@@ -148,7 +145,6 @@ void build_substitution_table(const ParseResult& res, SubstitutionTable& subs, c
 					build_substitution_types(comps[i], subs, tp);
 				}
 				if (comps[i].type == prefix and comps[i].comps.size() == 2) {
-					
 					subs.add_if_allowed(*std::get_if<ParseResult>(comps[i].comps.data()), tp);
 					build_substitution_types(*std::get_if<ParseResult>(&comps[i].comps[1]), subs, tp);
 				}
@@ -184,7 +180,6 @@ void build_substitution_table(const ParseResult& res, SubstitutionTable& subs, c
 							}
 						}
 					}
-					
 
 					p.comps.emplace_back(comps[j]);
 				}

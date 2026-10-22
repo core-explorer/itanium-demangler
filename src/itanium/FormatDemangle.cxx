@@ -830,7 +830,6 @@ struct FormatDemangle<builtin_boolean_type> {
 
 template <typename Formatter>
 std::optional<typename Formatter::value_type> form_simple_substitution(const std::string_view* p, const DemanglingDialect& dv, Formatter& formatter, const SkipSpec& skip, RecursionLimit max_recursion) {
-	
 	(void)max_recursion;
 	if (not p) {
 		return make_error();
@@ -2119,15 +2118,12 @@ struct FormatDemangle<nested_name> {
 		if (cvq) {
 			const auto* c = std::get_if<std::string_view>(cvq->comps.data());
 			if (c and *c == "K") {
-				
 				result.tail += formatter.decorate(Decoration::const_keyword, "const");
 			}
 			if (c and *c == "V") {
-				
 				result.tail += formatter.decorate(Decoration::const_keyword, "volatile");
 			}
 			if (c and *c == "KV") {
-				
 				result.tail += formatter.decorate(Decoration::const_keyword, "const");
 				result.tail += ' ';
 				result.tail += formatter.decorate(Decoration::const_keyword, "volatile");
@@ -3534,7 +3530,6 @@ struct FormatDemangle<encoding> {
 					if (tmp.empty()) {
 						continue;
 					}
-					
 
 					if (first) {
 						first = false;
@@ -3581,7 +3576,6 @@ struct FormatDemangle<encoding> {
 				auto tdv = dv;
 				if (dv.compiler_dialect == CompilerDialect::clang) {
 					tdv.resolve_template_args = false;
-					
 				}
 				auto tmp = format_demangled(*r, subs, ntt, tdv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
@@ -3688,7 +3682,6 @@ struct FormatDemangle<encoding> {
 			auto tdv = dv;
 			if (dv.compiler_dialect == CompilerDialect::clang) {
 				tdv.resolve_template_args = false;
-				
 			}
 			auto tmp = format_demangled(*r, subs, ntt, tdv, formatter, ps, skip, max_recursion);
 			if (not tmp) {
@@ -3697,6 +3690,29 @@ struct FormatDemangle<encoding> {
 			fin += *tmp;
 		}
 		return fin;
+	}
+};
+
+template <>
+struct FormatDemangle<overload_set> {
+	template <typename Formatter>
+	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
+		if (max_recursion == 0) {
+			return std::unexpected(ParseError::recursion_reached);
+		}
+		--max_recursion;
+
+		for (const auto& c : res.comps) {
+			if (const auto* p = std::get_if<ParseResult>(&c); p) {
+				auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				if (not tmp) {
+					return tmp;
+				}
+				return formatter.decorate(Decoration::function_name, *tmp);
+			}
+		}
+
+		return std::unexpected(ParseError::mismatched_literal);
 	}
 };
 
@@ -4861,6 +4877,8 @@ std::expected<typename Formatter::value_type, ParseError> format_demangled(const
 		return format_demangled<fold_right_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case pack_indexing_expression:
 		return format_demangled<pack_indexing_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	case overload_set:
+		return format_demangled<overload_set>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 
 	case type:
 	case builtin_type:

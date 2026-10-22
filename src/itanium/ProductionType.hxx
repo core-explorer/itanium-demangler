@@ -127,7 +127,8 @@ enum class ProductionType : uint8_t {
 	pack_indexing_expression,
 	dot_vendor_specific_suffix,
 	global_sub_for_mangled_name,
-	any_mangled_name
+	any_mangled_name,
+	overload_set
 };
 
 std::string_view to_string_view(ProductionType);

@@ -14,7 +14,7 @@
 #include <string_view>
 namespace swartalf::itanium {
 namespace {
-std::array<std::string_view, 125> production_names = {
+std::array<std::string_view, 126> production_names = {
     "none",
     "unary_operator_name",
     "binary_operator_name",
@@ -139,7 +139,9 @@ std::array<std::string_view, 125> production_names = {
     "pack_indexing_expression",
     "dot_vendor_specific_suffix",
     "global_sub_for_mangled_name",
-    "any_mangled_name"};
+    "any_mangled_name",
+    "overload_set",
+};
 }
 
 std::string_view to_string_view(ProductionType t) {

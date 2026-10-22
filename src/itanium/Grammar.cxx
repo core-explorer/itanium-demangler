@@ -45,7 +45,6 @@ void add_name_rules(ProductionGrammar& rules) {
 
 	rules.add_rule<explicit_object_member>("H");
 
-	
 	rules.add_rule<prefix>(closure_prefix);
 
 	rules.add_rule<prefix>(unqualified_name);
@@ -204,7 +203,7 @@ void add_type_rules(ProductionGrammar& rules) {
 	rules.add_rule<reference_type>("R", type);
 	rules.add_rule<rvalue_reference_type>("O", type);
 	rules.add_rule<complex_type_c99>("C", type);
-	
+
 	rules.add_rule<template_template_type>(template_template_param, template_args);
 	rules.add_rule<type_constraint_llvm>(name);
 	rules.add_rule<constrained_type_llvm>("Dk", type_constraint_llvm);
@@ -220,7 +219,7 @@ void add_type_rules(ProductionGrammar& rules) {
 	rules.add_rule<const_type>("K", type);
 	rules.add_rule<volatile_type>("V", type);
 	rules.add_rule<restrict_type>("r", type);
-	
+
 	rules.add_rule<cv_qualifiers>("KV");
 	rules.add_rule<cv_qualifiers>("K");
 	rules.add_rule<cv_qualifiers>("V");
@@ -257,19 +256,18 @@ void add_builtin_type_rules(ProductionGrammar& rules) {
 	rules.add_rule<builtin_real_type>("g");
 	rules.add_rule<builtin_other_type>("z");
 	rules.add_rule<builtin_real_type>("DF16b");
-	
+
 	rules.add_rule<builtin_real_type>("DF16_");
 	rules.add_rule<builtin_real_type>("DF32_");
 	rules.add_rule<builtin_real_type>("DF64_");
 	rules.add_rule<builtin_real_type>("DF128_");
-	
+
 	rules.add_rule<builtin_integral_type>("Di");
 	rules.add_rule<builtin_integral_type>("Ds");
 	rules.add_rule<builtin_integral_type>("Du");
 	rules.add_rule<builtin_other_type>("Da");
 	rules.add_rule<builtin_other_type>("Dc");
 	rules.add_rule<builtin_other_type>("Dn");
-	
 }
 
 void add_function_type_rules(ProductionGrammar& rules) {
@@ -473,9 +471,8 @@ void add_closure_rules(ProductionGrammar& rules) {
 	rules.add_rule<closure_type_name>("Ul", lambda_sig, "E", opt(nonneg_number), "_");
 	rules.add_rule<lambda_sig>(rep(type));
 	rules.add_rule<local_name>("Z", encoding, "Ed", number, "_", name);
-	
+
 	rules.add_rule<closure_prefix>("M", closure_type_name);
-	
 }
 
 void add_substitution_rules(ProductionGrammar& rules) {
@@ -524,6 +521,12 @@ ProductionGrammar build_grammar() {
 	rules.lookup = optimize(rules);
 
 	return rules;
+}
+
+void extend_grammar(ProductionGrammar& rules) {
+	rules.add_rule<overload_set>("_O", name);
+	rules.add_rule<name>(overload_set);
+	rules.lookup = optimize(rules);
 }
 
 }

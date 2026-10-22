@@ -56,7 +56,6 @@ HighlightedTextSegment HighlightDecorator::decorate(Decoration deco, const Highl
 
 	if (deco == Decoration::function_name) {
 		hl.fg = Color256Cmy(ColorFloatCmy(0.1f, 0.1f, 0.5f));
-		
 	}
 	if (deco == Decoration::pointer) {
 		hl.fg = Color256Cmy(ColorFloatCmy(0.2f, 0.1f, 0.2f));
@@ -133,7 +132,7 @@ ColorFloat gammodrify(ColorFloat f) {
 	return z;
 }
 
-enum class ColorTransform:uint8_t {
+enum class ColorTransform : uint8_t {
 	rgb,
 	rbg,
 	brg,

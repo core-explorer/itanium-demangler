@@ -147,7 +147,7 @@ int FiltApp::run(const ParsingResult& parseResult) {
 			config.partial = true;
 			break;
 		case OptionName::version:
-			println(stdout, "{} {}", parser.programName, get_version_string());
+			fmt::print(stdout, "{} {}\n", parser.programName, get_version_string());
 			return 0;
 		default:
 			colored_println(stderr, "Invalid option", opt.long_name, "error");

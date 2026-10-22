@@ -170,7 +170,6 @@ void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
 			std::string pretty = epretty ? *epretty : "_ERROR"s;
 			std::string raw = eraw ? *eraw : "_ERROR"s;
 			std::string cxxdemangle;
-			
 
 			if (config.check) {
 				cxxdemangle = demangle(word);
@@ -179,7 +178,6 @@ void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
 			if (config.check and cxxdemangle == word) {
 				pretty = bold_magenta(raw);
 			} else if ((not config.check) or raw == cxxdemangle or short_names or config.subs or config.templ or config.hide_return or config.pack) {
-				
 			} else {
 				size_t matching = 0;
 				while (matching < raw.size() and matching < cxxdemangle.size() and raw[matching] == cxxdemangle[matching]) {
@@ -200,7 +198,6 @@ void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
 			}
 
 			fmt::print("{}", pretty);
-			
 
 			return;
 		} else {
@@ -218,7 +215,7 @@ void FiltAnalyzer::stream() const {
 	while (std::getline(std::cin, line)) {
 		std::vector<std::string_view> lwords;
 		split_with_delims(lwords, line, " \t@");
-		
+
 		for (size_t i = 0; i < lwords.size(); i++) {
 			auto& word = lwords[i];
 			printWord(word, config);

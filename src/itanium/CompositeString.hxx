@@ -1,7 +1,7 @@
 #pragma once
 #include "Decoration.hxx"
-#include <expected>
 #include "../util/format.hxx"
+#include <expected>
 #include <string>
 #include <string_view>
 #include <utility>

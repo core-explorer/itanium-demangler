@@ -2,11 +2,11 @@
 #include "ItaniumOperatorType.hxx"
 #include "ProductionType.hxx"
 #include <array>
-#include <unordered_map>
-#include <unordered_set>
 #include <map>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 namespace swartalf::itanium {
@@ -181,5 +181,6 @@ struct ProductionGrammar {
 };
 
 ProductionGrammar build_grammar();
+void extend_grammar(ProductionGrammar& rules);
 
 }
