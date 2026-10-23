@@ -1,6 +1,7 @@
 #include "FormatDemangleLimit.hxx"
 #include "FormatDemangle.hxx"
 #include "FunctionClassification.hxx"
+#include "LengthOnly.hxx"
 #include "ParseResult.hxx"
 #include "ProductionType.hxx"
 
@@ -129,17 +130,16 @@ std::pair<unsigned, unsigned> get_max_num_function_and_template_parameters(const
 	return ftp;
 }
 
-std::expected<std::pair<std::string, DemanglingDialect>, ParseError> format_demangled_ascii_limit(unsigned len, const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
-	auto etmp = format_demangled_ascii(res, subs, tp, dv, skip, max_recursion);
+std::expected<std::pair<LengthOnly, DemanglingDialect>, ParseError> format_demangled_ascii_limit(unsigned len, const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
+	auto etmp = format_demangled_ascii_length(res, subs, tp, dv, skip, max_recursion);
 	if (not etmp) {
 		return std::unexpected(etmp.error());
 	}
-	{
-		auto& tmp = *etmp;
-		if (tmp.size() <= len) {
-			return std::make_pair(tmp, dv);
-		}
+
+	if (etmp->size() <= len) {
+		return std::make_pair(*etmp, dv);
 	}
+
 	auto ndv = dv;
 	ndv.return_type_style = ReturnTypeStyle::no_return;
 	ndv.hide_abi_suffix = true;
@@ -148,16 +148,14 @@ std::expected<std::pair<std::string, DemanglingDialect>, ParseError> format_dema
 	ndv.parenthesize_expressions = false;
 
 	if (ndv != dv) {
-		etmp = format_demangled_ascii(res, subs, tp, ndv, skip, max_recursion);
+		etmp = format_demangled_ascii_length(res, subs, tp, ndv, skip, max_recursion);
 		if (not etmp) {
 			return std::unexpected(etmp.error());
 		}
 	}
-	{
-		auto& tmp = *etmp;
-		if (tmp.size() <= len) {
-			return std::make_pair(tmp, ndv);
-		}
+
+	if (etmp->size() <= len) {
+		return std::make_pair(*etmp, ndv);
 	}
 
 	bool tp_mode = true;
@@ -174,22 +172,16 @@ std::expected<std::pair<std::string, DemanglingDialect>, ParseError> format_dema
 		} else {
 			ndv.max_function_parameters--;
 		}
-		etmp = format_demangled_ascii(res, subs, tp, ndv, skip, max_recursion);
+		etmp = format_demangled_ascii_length(res, subs, tp, ndv, skip, max_recursion);
 		if (not etmp) {
 			return std::unexpected(etmp.error());
 		}
 
-		{
-			auto& tmp = *etmp;
-			if (tmp.size() <= len) {
-				return std::make_pair(tmp, ndv);
-			}
+		if (etmp->size() <= len) {
+			return std::make_pair(*etmp, ndv);
 		}
 	}
 
-	{
-		auto& tmp = *etmp;
-		return std::make_pair(tmp, ndv);
-	}
+	return std::make_pair(*etmp, ndv);
 }
 }

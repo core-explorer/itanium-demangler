@@ -4,6 +4,7 @@ namespace swartalf {
 
 HighlightedText HighlightDecorator::decorate(Decoration deco, const HighlightedText& tn, unsigned level) {
 	HighlightedText result;
+	result.sg.reserve(tn.sg.size());
 	for (const auto& t : tn.sg) {
 		result += decorate(deco, t, level);
 	}
@@ -34,21 +35,19 @@ Highlight blend(const Highlight& hi, const Highlight& ho) {
 	Highlight res;
 
 	res.fg = blend(hi.fg, ho.fg);
-
 	res.bg = blend(hi.bg, ho.bg);
-
 	res.ud = blend(hi.ud, ho.ud);
-
 	res.ul = UnderlineStyle(std::max(unsigned(hi.ul), unsigned(ho.ul)));
 
 	res.bold = hi.bold or ho.bold;
 	res.italic = hi.italic or ho.italic;
 	res.alpha = hi.alpha * ho.alpha;
+	res.link = hi.link;
+	res.tags = hi.tags | ho.tags;
 	return res;
 }
 
 HighlightedTextSegment HighlightDecorator::decorate(Decoration deco, const HighlightedTextSegment& ts, unsigned level) {
-	(void)deco;
 	(void)level;
 
 	const auto& [tn, ihl] = ts;
@@ -268,6 +267,39 @@ std::string render_html(const HighlightedTextSegment& ht, bool light_mode) {
 	return fmt::format("<span {}>{}</span>", style, escape_xml(text));
 }
 
+std::string render_html(const HighlightedTextSegment& ht, bool light_mode, const Navigation& nav) {
+	const auto& [text, hl] = ht;
+	std::string style = "style=\"";
+
+	if (hl.bold) {
+		style += "font-weight: bold;";
+	}
+	if (hl.italic) {
+		style += "font-style: italic;";
+	}
+
+	if (light_mode) {
+		float a = 1.0f - hl.alpha;
+		auto fg = Color256(ColorFloat(a, a, a));
+		auto bg = Color256(hl.fg);
+		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
+		style += fmt::format("background-color: rgb({},{},{});", bg.r, bg.g, bg.b);
+	} else {
+		auto f = ColorFloat(Color256(hl.fg));
+		f *= hl.alpha;
+		auto fg = Color256(f);
+		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
+	}
+
+	style += "\"";
+
+	auto disp = fmt::format("<span {}>{}</span>", style, escape_xml(text));
+	if (not hl.link.empty()) {
+		return hyperlink(hl.link, disp, nav);
+	}
+	return disp;
+}
+
 std::string render_cli_light(const HighlightedTextSegment& ht) {
 	return render_cli(ht, true);
 }
@@ -297,7 +329,13 @@ std::string render_html(const HighlightedText& ht, bool light_mode) {
 	}
 	return result;
 }
-
+std::string render_html(const HighlightedText& ht, bool light_mode, const Navigation& nav) {
+	std::string result;
+	for (const auto& t : ht.sg) {
+		result += render_html(t, light_mode, nav);
+	}
+	return result;
+}
 CompositeStack<std::string> render_cli(const CompositeStack<HighlightedText>& ht, bool light_mode) {
 	CompositeStack<std::string> result;
 	result.head = render_cli(ht.head, light_mode);
@@ -326,7 +364,12 @@ CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& h
 	result.tail = render_html(ht.tail, light_mode);
 	return result;
 }
-
+CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& ht, bool light_mode, const Navigation& nav) {
+	CompositeStack<std::string> result;
+	result.head = render_html(ht.head, light_mode, nav);
+	result.tail = render_html(ht.tail, light_mode, nav);
+	return result;
+}
 std::string render_html_dark(const HighlightedText& ht) {
 	std::string result;
 	for (const auto& t : ht.sg) {
