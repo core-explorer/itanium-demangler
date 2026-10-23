@@ -31,7 +31,7 @@ add_link_options(-pthread -sPTHREAD_POOL_SIZE=7)
 endif()
 #add_compile_options( -msimd128)
 add_compile_options( -mbulk-memory )
-
+add_link_options( -sSTACK_SIZE=2097152 )
 add_link_options( -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=4294901760 )
 
 if(CDX_ENABLE_ASSERT)

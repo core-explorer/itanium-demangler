@@ -27,6 +27,7 @@ set(CMAKE_RANLIB ${EMRANLIB})
 add_compile_options( -mbulk-memory )
 add_compile_options( --target=wasm64 -m64)
 add_link_options(-sASSERTIONS=1 -sWASM_BIGINT)
+add_link_options( -sSTACK_SIZE=4194304 )
 add_link_options( -sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=131072000 -sMAXIMUM_MEMORY=4294901760 --target=wasm64 -m64 )
 
 if(CDX_ENABLE_ASSERT)
