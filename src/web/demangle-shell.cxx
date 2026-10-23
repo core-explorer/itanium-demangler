@@ -62,8 +62,8 @@ void demangleText(std::string_view mangled) {
 		if (config.length < 100000) {
 			auto elraw = format_demangled_ascii_limit(config.length, *parsed, subs, nt, dv, skip, max_recursion);
 			if (elraw) {
-				eraw = elraw->first;
 				dv = elraw->second;
+				eraw = format_demangled_ascii(*parsed, subs, nt, dv, skip, max_recursion);
 			} else {
 				eraw = std::unexpected(elraw.error());
 			}
