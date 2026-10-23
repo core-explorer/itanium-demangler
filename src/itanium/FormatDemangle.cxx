@@ -7,6 +7,7 @@
 #include "FunctionClassification.hxx"
 #include "Grammar.hxx"
 #include "HighlightedText.hxx"
+#include "LengthOnly.hxx"
 #include "ParseName.hxx"
 #include "ParseResult.hxx"
 #include "ProductionType.hxx"
@@ -123,17 +124,19 @@ std::optional<int> get_pack_size(const ParseResult& res, const SubstitutionTable
 	return std::nullopt;
 }
 
-namespace {
-
-std::string make_error() {
-	return "_ERROR"s;
-}
-
 struct PackSelector {
 	using value_type = int;
 	static constexpr value_type all = -1;
 	value_type val = all;
 };
+template <typename Formatter>
+std::expected<typename Formatter::value_type, ParseError> format_demangled(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion);
+
+namespace {
+
+std::string make_error() {
+	return "_ERROR"s;
+}
 
 template <ProductionType ltype>
 struct FormatDemangle {
@@ -155,7 +158,7 @@ template <ProductionType ltype, typename Formatter>
 auto format_demangled_type(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, Stacked<typename Formatter::value_type>& stack, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion);
 
 template <ProductionType ltype, typename Formatter>
-auto format_demangled(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion);
+auto format_demangledp(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion);
 
 template <>
 struct FormatDemangle<class_enum_type> {
@@ -254,10 +257,11 @@ struct FormatDemangle<restrict_type> {
 			return std::unexpected(ParseError::recursion_reached);
 		}
 		--max_recursion;
+		using namespace std::string_view_literals;
 		using StringType = typename Formatter::value_type;
 		for (const auto& c : res.comps) {
 			if (const auto* p = std::get_if<ParseResult>(&c); p) {
-				StringType tmp = " "s;
+				auto tmp = StringType(" "sv);
 				switch (dv.restrict_keyword) {
 				case swartalf::RestrictKeyword::no_underscore:
 					tmp += formatter.decorate(Decoration::const_keyword, "restrict");
@@ -596,6 +600,126 @@ struct FormatDemangle<vector_type> {
 	}
 };
 
+template <typename Formatter>
+std::expected<
+    typename Formatter::value_type, ParseError>
+format_function_parameters(std::span<const std::variant<std::string_view, ParseResult>> comps, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, unsigned previous_params, bool explicit_object_param, RecursionLimit max_recursion) {
+	using StringType = typename Formatter::value_type;
+
+	if (comps.size() == 1) {
+		const auto* x = std::get_if<ParseResult>(comps.data());
+		if (x and x->type == type and x->comps.size() == 1) {
+			const auto* y = std::get_if<ParseResult>(x->comps.data());
+			if (y and y->type == builtin_type and y->comps.size() == 1) {
+				const auto* z = std::get_if<ParseResult>(y->comps.data());
+				if (z and z->type == builtin_other_type) {
+					const auto* l = std::get_if<std::string_view>(z->comps.data());
+					if (l and *l == "v") {
+						return StringType {};
+					}
+				}
+			}
+		}
+	}
+
+	StringType params;
+	bool first = previous_params == 0;
+	size_t pcount = previous_params;
+	for (const auto& cq : comps) {
+		const auto* x = std::get_if<ParseResult>(&cq);
+		if (x) {
+			if (x->type == type and x->comps.size() == 1) {
+				const auto* y = std::get_if<ParseResult>(x->comps.data());
+				if (y) {
+					x = y;
+				}
+			}
+
+			Stacked<StringType> pstack;
+			if (x->type == pack_type and x->comps.size() == 2) {
+				auto ops = get_pack_size(*x, subs, tp, max_recursion);
+				const auto* pack_exp = std::get_if<ParseResult>(&x->comps[1]);
+				if (ops and pack_exp) {
+					int pack_size = *ops;
+					for (int i = 0; i < pack_size; ++i) {
+						PackSelector psi {i};
+						auto ctmp = compose(format_demangled_type(*pack_exp, subs, tp, dv, formatter, pstack, psi, skip, max_recursion));
+
+						auto& tmp = *ctmp;
+						if (tmp.empty()) {
+							continue;
+						}
+
+						if (first) {
+							first = false;
+							if (explicit_object_param) {
+								params += formatter.decorate(Decoration::keyword, "this");
+								params += ' ';
+							}
+						} else {
+							params += ", ";
+						}
+
+						if (pcount >= dv.max_function_parameters) {
+							params += ".";
+							break;
+						}
+
+						if (pcount & 1) {
+							params += formatter.decorate(Decoration::call_parameter_odd, tmp);
+						} else {
+							params += formatter.decorate(Decoration::call_parameter_even, tmp);
+						}
+						pcount++;
+					}
+					continue;
+				}
+			}
+
+			auto ctmp = compose(format_demangled_type(*x, subs, tp, dv, formatter, pstack, ps, skip, max_recursion));
+			if (not ctmp) {
+				return ctmp;
+			}
+			auto& tmp = *ctmp;
+			if (tmp.empty()) {
+				continue;
+			}
+
+			if (first) {
+				first = false;
+				if (explicit_object_param) {
+					params += formatter.decorate(Decoration::keyword, "this");
+					params += ' ';
+				}
+			} else {
+				params += ", ";
+			}
+
+			if (pcount >= dv.max_function_parameters) {
+				params += ".";
+				break;
+			}
+
+			if (pcount & 1) {
+				params += formatter.decorate(Decoration::call_parameter_odd, tmp);
+			} else {
+				params += formatter.decorate(Decoration::call_parameter_even, tmp);
+			}
+			pcount++;
+		}
+	}
+
+	return params;
+}
+
+template <typename Formatter>
+std::expected<typename Formatter::value_type, ParseError> format_function_parameters(const ParseResult& q, const SubstitutionTableView& subs, const NestedTemplateParams& ntt, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, bool had_return, unsigned previous_params, bool explicit_object_param, RecursionLimit max_recursion) {
+	auto comps = std::span<const std::variant<std::string_view, ParseResult>>(q.comps);
+	auto rcomps = comps.subspan(not had_return);
+
+	return format_function_parameters(rcomps, subs, ntt, dv, formatter, ps, skip, previous_params, explicit_object_param, max_recursion);
+}
+
 template <>
 struct FormatDemangle<function_type> {
 	template <typename Formatter>
@@ -635,34 +759,14 @@ struct FormatDemangle<function_type> {
 		}
 
 		StringType pparams;
-		StringType params;
 		pparams += formatter.decorate(Decoration::call_parentheses, "(");
+		unsigned previous_params = 0;
+		auto params = format_function_parameters(*q, subs, tp, dv, formatter, ps, skip, false, previous_params, false, max_recursion);
+		if (not params) {
+			return params;
+		}
 
-		bool had_return = false;
-		bool first = true;
-		for (const auto& cq : q->comps) {
-			const auto* x = std::get_if<ParseResult>(&cq);
-			if (x) {
-				if (not had_return) {
-					had_return = true;
-					continue;
-				}
-				if (first) {
-					first = false;
-				} else {
-					params += ", ";
-				}
-				Stacked<StringType> pstack;
-				auto tmp = format_demangled_type(*x, subs, tp, dv, formatter, pstack, ps, skip, max_recursion);
-				if (not tmp) {
-					return tmp;
-				}
-				params += compose(*tmp);
-			}
-		}
-		if (params != "void") {
-			pparams += params;
-		}
+		pparams += *params;
 		pparams += formatter.decorate(Decoration::call_parentheses, ")");
 
 		auto partial = stack.partial_collapse(entry_depth);
@@ -779,7 +883,8 @@ struct FormatDemangle<builtin_other_type> {
 		if (const auto* p = std::get_if<std::string_view>(res.comps.data()); p) {
 			return formatter.decorate(Decoration::type_keyword, demangleBasicType(*p, dv));
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -792,20 +897,21 @@ struct FormatDemangle<builtin_real_type> {
 		if (const auto* p = std::get_if<std::string_view>(res.comps.data()); p) {
 			return formatter.decorate(Decoration::type_keyword, demangleBasicType(*p, dv));
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
 template <>
 struct FormatDemangle<builtin_integral_type> {
 	template <typename Formatter>
-	static typename Formatter::value_type form_type(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, Stacked<typename Formatter::value_type>& stack, PackSelector, const SkipSpec&, RecursionLimit) {
+	static typename Formatter::value_type form_type(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, Stacked<typename Formatter::value_type>&, PackSelector, const SkipSpec&, RecursionLimit) {
 		(void)subs;
 		(void)tp;
-		(void)stack;
 		const auto* p = std::get_if<std::string_view>(res.comps.data());
 		if (not p) {
-			return make_error();
+			using StringType = typename Formatter::value_type;
+			return StringType(make_error());
 		}
 
 		return formatter.decorate(Decoration::type_keyword, demangleBasicType(*p, dv));
@@ -821,7 +927,8 @@ struct FormatDemangle<builtin_boolean_type> {
 
 		const auto* p = std::get_if<std::string_view>(res.comps.data());
 		if (not p) {
-			return make_error();
+			using StringType = typename Formatter::value_type;
+			return StringType(make_error());
 		}
 
 		return formatter.decorate(Decoration::type_keyword, demangleBasicType(*p, dv));
@@ -831,18 +938,20 @@ struct FormatDemangle<builtin_boolean_type> {
 template <typename Formatter>
 std::optional<typename Formatter::value_type> form_simple_substitution(const std::string_view* p, const DemanglingDialect& dv, Formatter& formatter, const SkipSpec& skip, RecursionLimit max_recursion) {
 	(void)max_recursion;
+	using namespace std::string_view_literals;
+	using StringType = typename Formatter::value_type;
 	if (not p) {
-		return make_error();
+		return StringType(make_error());
 	}
 
 	if (*p == "St") {
-		return "std"s;
+		return StringType("std"sv);
 	}
 
 	if (*p == "Sa") {
 		for (const auto& a : skip.skip) {
 			if (not a.demangled_parts.empty() and a.demangled_parts[0] == "std") {
-				return "allocator"s;
+				return StringType("allocator"sv);
 			}
 		}
 
@@ -851,7 +960,7 @@ std::optional<typename Formatter::value_type> form_simple_substitution(const std
 	if (*p == "Sb") {
 		for (const auto& a : skip.skip) {
 			if (not a.demangled_parts.empty() and a.demangled_parts[0] == "std") {
-				return "basic_string"s;
+				return StringType("basic_string"sv);
 			}
 		}
 		return "std" + formatter.decorate(Decoration::noise, "::") + "basic_string"s;
@@ -865,24 +974,24 @@ std::optional<typename Formatter::value_type> form_simple_substitution(const std
 		if (not a.demangled_parts.empty() and a.demangled_parts[0] == "std") {
 			if (*p == "Ss") {
 				if (not dv.resolve_std_typedefs) {
-					return "string"s;
+					return StringType("string"sv);
 				}
-				return "basic_string<char, char_traits<char>, allocator<char>" + sw + ">"s;
+				return formatter.escape("basic_string<char, char_traits<char>, allocator<char>" + sw + ">");
 			}
 			if (*p == "Si") {
 				if (not dv.resolve_std_typedefs) {
-					return "istream"s;
+					return StringType("istream"sv);
 				}
-				return "basic_istream<char, char_traits<char>" + sw + ">"s;
+				return formatter.escape("basic_istream<char, char_traits<char>" + sw + ">");
 			}
 			if (*p == "So") {
 				if (not dv.resolve_std_typedefs) {
-					return "ostream"s;
+					return StringType("ostream"sv);
 				}
-				return "basic_ostream<char, char_traits<char>" + sw + ">"s;
+				return formatter.escape("basic_ostream<char, char_traits<char>" + sw + ">");
 			}
 			if (*p == "Sd") {
-				return "basic_iostream<char, char_traits<char>" + sw + ">"s;
+				return formatter.escape("basic_iostream<char, char_traits<char>" + sw + ">");
 			}
 		}
 	}
@@ -890,30 +999,30 @@ std::optional<typename Formatter::value_type> form_simple_substitution(const std
 	if (*p == "Ss") {
 		auto sr = formatter.decorate(Decoration::noise, "::");
 		if (not dv.resolve_std_typedefs) {
-			return "std" + sr + "string"s;
+			return "std" + sr + "string";
 		}
-		return "std" + sr + "basic_string<char, std" + sr + "char_traits<char>, std" + sr + "allocator<char>" + sw + ">"s;
+		return "std" + sr + formatter.escape("basic_string<char, std") + sr + formatter.escape("char_traits<char>, std") + sr + formatter.escape("allocator<char>") + sw + formatter.escape(">");
 	}
 	if (*p == "Si") {
 		auto sr = formatter.decorate(Decoration::noise, "::");
 		if (not dv.resolve_std_typedefs) {
-			return "std" + sr + "istream"s;
+			return "std" + sr + "istream";
 		}
 		return "std" + sr + "basic_istream<char, std" + sr + "char_traits<char>" + sw + ">"s;
 	}
 	if (*p == "So") {
 		auto sr = formatter.decorate(Decoration::noise, "::");
 		if (not dv.resolve_std_typedefs) {
-			return "std" + sr + "ostream"s;
+			return "std" + sr + "ostream";
 		}
-		return "std" + sr + "basic_ostream<char, std" + sr + "char_traits<char>" + sw + ">"s;
+		return "std" + sr + formatter.escape("basic_ostream<char, std") + sr + formatter.escape("char_traits<char>") + sw + formatter.escape(">");
 	}
 	if (*p == "Sd") {
 		auto sr = formatter.decorate(Decoration::noise, "::");
 		if (not dv.resolve_std_typedefs) {
-			return "std" + sr + "iostream"s;
+			return "std" + sr + "iostream";
 		}
-		return "std" + sr + "basic_iostream<char, std" + sr + "char_traits<char>" + sw + ">"s;
+		return "std" + sr + formatter.escape("basic_iostream<char, std") + sr + formatter.escape("char_traits<char>") + sw + formatter.escape(">");
 	}
 
 	return std::nullopt;
@@ -992,7 +1101,7 @@ struct FormatDemangle<substitution> {
 				return StringType(formatter.decorate(Decoration::generic_italic, "S"));
 			}
 			if (subs.entries[0].type == partial_nested_name) {
-				return format_demangled<partial_nested_name>(subs.entries[0], {}, subs.stp[0], dv, formatter, ps, skip, max_recursion);
+				return format_demangledp<partial_nested_name>(subs.entries[0], {}, subs.stp[0], dv, formatter, ps, skip, max_recursion);
 			}
 			return format_demangled_type(subs.entries[0], {}, subs.stp[0], dv, formatter, stack, ps, skip, max_recursion);
 		}
@@ -1011,7 +1120,7 @@ struct FormatDemangle<substitution> {
 								return StringType(formatter.decorate(Decoration::generic_italic, fmt::format("S{}", *qq)));
 							}
 							if (subs.entries[idx].type == partial_nested_name) {
-								return format_demangled<partial_nested_name>(subs.entries[idx], subs.subspan(0, idx), subs.stp[idx], dv, formatter, ps, skip, max_recursion);
+								return format_demangledp<partial_nested_name>(subs.entries[idx], subs.subspan(0, idx), subs.stp[idx], dv, formatter, ps, skip, max_recursion);
 							}
 							return format_demangled_type(subs.entries[idx], subs.subspan(0, idx), subs.stp[idx], dv, formatter, stack, ps, skip, max_recursion);
 						}
@@ -1884,10 +1993,10 @@ struct FormatDemangle<number> {
 		--max_recursion;
 		if (const auto* p = std::get_if<ParseResult>(res.comps.data()); p) {
 			if (p->type == nonneg_number) {
-				return format_demangled<nonneg_number>(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				return format_demangledp<nonneg_number>(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 			}
 			if (p->type == negative_number) {
-				return format_demangled<negative_number>(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				return format_demangledp<negative_number>(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 			}
 		}
 		return StringType(make_error());
@@ -1906,7 +2015,7 @@ struct FormatDemangle<source_name> {
 		for (const auto& c : res.comps) {
 			if (const auto* p = std::get_if<ParseResult>(&c); p) {
 				if (p->type == identifier) {
-					return format_demangled<identifier>(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+					return format_demangledp<identifier>(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 				}
 			}
 		}
@@ -1949,7 +2058,8 @@ struct FormatDemangle<unscoped_name> {
 				return formatter.link_to(res, *tmp, subs, tp);
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -1967,7 +2077,6 @@ struct FormatDemangle<nested_name> {
 		--max_recursion;
 
 		std::vector<const ParseResult*> v;
-
 		std::vector<std::string> skipped;
 
 		for (size_t i = 0; i < res.comps.size(); ++i) {
@@ -2052,6 +2161,7 @@ struct FormatDemangle<nested_name> {
 			}
 			if (not was_ctor_dtor) {
 				auto ctmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+
 				if (not ctmp) {
 					return ctmp;
 				}
@@ -2060,6 +2170,14 @@ struct FormatDemangle<nested_name> {
 				if (tmp.empty()) {
 					continue;
 				}
+				std::expected<std::string, ParseError> ctmpa;
+				if constexpr (std::is_same_v<Formatter, AsciiFormatter>) {
+					ctmpa = ctmp;
+				} else {
+					AsciiFormatter asc;
+					ctmpa = format_demangled(*p, subs, tp, dv, asc, ps, skip, max_recursion);
+				}
+				auto& tmpa = *ctmpa;
 
 				bool skip_this = false;
 				for (const auto& alt : skip.skip) {
@@ -2071,7 +2189,7 @@ struct FormatDemangle<nested_name> {
 								break;
 							}
 						}
-						if (this_alt and alt.demangled_parts[skipped.size()] == tmp) {
+						if (this_alt and alt.demangled_parts[skipped.size()] == tmpa) {
 							skipped.emplace_back(alt.demangled_parts[skipped.size()]);
 							skip_this = true;
 							break;
@@ -2085,7 +2203,7 @@ struct FormatDemangle<nested_name> {
 				if (dv.separating_whitespace and result.head.ends_with('<') and tmp.starts_with('<')) {
 					result += ' ';
 				}
-				if (tmp == "_GLOBAL__N_1") {
+				if (tmpa == "_GLOBAL__N_1") {
 					if (not result.empty() and p->type != template_args) {
 						result += formatter.decorate(Decoration::noise, "::");
 					}
@@ -2161,6 +2279,13 @@ struct FormatDemangle<partial_nested_name> {
 		for (const auto& c : res.comps) {
 			if (const auto* p = std::get_if<ParseResult>(&c); p) {
 				auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				std::expected<std::string, ParseError> tmpa;
+				if constexpr (std::is_same_v<Formatter, AsciiFormatter>) {
+					tmpa = tmp;
+				} else {
+					AsciiFormatter asc;
+					tmpa = format_demangled(*p, subs, tp, dv, asc, ps, skip, max_recursion);
+				}
 				if (not tmp) {
 					return tmp;
 				}
@@ -2178,7 +2303,7 @@ struct FormatDemangle<partial_nested_name> {
 								break;
 							}
 						}
-						if (this_alt and alt.demangled_parts[skipped.size()] == *tmp) {
+						if (this_alt and alt.demangled_parts[skipped.size()] == *tmpa) {
 							skipped.emplace_back(alt.demangled_parts[skipped.size()]);
 							skip_this = true;
 							break;
@@ -2193,7 +2318,7 @@ struct FormatDemangle<partial_nested_name> {
 					result += formatter.decorate(Decoration::noise, "::");
 				}
 
-				if (*tmp == "_GLOBAL__N_1") {
+				if (*tmpa == "_GLOBAL__N_1") {
 					result += formatter.decorate(Decoration::generic_italic, "(anonymous namespace)");
 				} else {
 					result += *tmp;
@@ -2454,7 +2579,8 @@ struct FormatDemangle<vtable> {
 				return "vtable " + formatter.decorate(Decoration::noise, "for") + " " + *tmp;
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 template <>
@@ -2471,10 +2597,11 @@ struct FormatDemangle<global_sub_for_mangled_name> {
 				if (not tmp) {
 					return tmp;
 				}
-				return "global variable construction " + formatter.decorate(Decoration::noise, "for") + " " + *tmp;
+				return "global initialization " + formatter.decorate(Decoration::noise, "for") + " " + *tmp;
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -2513,8 +2640,8 @@ struct FormatDemangle<construction_vtable> {
 			}
 			return "construction vtable " + formatter.decorate(Decoration::noise, "for") + " " + *tmp0 + formatter.decorate(Decoration::generic_italic, "-in-") + *tmp1;
 		}
-
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -2535,7 +2662,8 @@ struct FormatDemangle<typeinfo> {
 				return "typeinfo " + formatter.decorate(Decoration::noise, "for") + " " + *tmp;
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -2713,7 +2841,8 @@ struct FormatDemangle<unary_operator_name> {
 				}
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -2736,7 +2865,8 @@ struct FormatDemangle<binary_operator_name> {
 				}
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -2752,35 +2882,14 @@ struct FormatDemangle<bare_function_type> {
 		--max_recursion;
 		result += formatter.decorate(Decoration::call_parentheses, "(");
 
-		StringType params;
-		size_t pcount = 0;
-		for (const auto& c : res.comps) {
-			if (const auto* p = std::get_if<ParseResult>(&c); p) {
-				Stacked<StringType> pstack;
-				auto ctmp = compose(format_demangled_type(*p, subs, tp, dv, formatter, pstack, ps, skip, max_recursion));
-				if (not ctmp) {
-					return ctmp;
-				}
-				auto& tmp = *ctmp;
-				if (tmp.empty()) {
-					continue;
-				}
-				if (not params.empty()) {
-					params += ", "sv;
-				}
+		unsigned previous_params = 0;
+		auto params = format_function_parameters(res.comps, subs, tp, dv, formatter, ps, skip, previous_params, false, max_recursion);
 
-				if (pcount & 1) {
-					params += formatter.decorate(Decoration::call_parameter_odd, tmp);
-				} else {
-					params += formatter.decorate(Decoration::call_parameter_even, tmp);
-				}
-				pcount++;
-			}
+		if (not params) {
+			return params;
 		}
+		result += *params;
 
-		if (params != "void") {
-			result += params;
-		}
 		result += formatter.decorate(Decoration::call_parentheses, ")");
 
 		return result;
@@ -2798,35 +2907,12 @@ struct FormatDemangle<lambda_sig> {
 		}
 		--max_recursion;
 		result += formatter.decorate(Decoration::call_parentheses, "(");
-
-		StringType params;
-		size_t pcount = 0;
-		for (const auto& c : res.comps) {
-			if (const auto* p = std::get_if<ParseResult>(&c); p) {
-				auto ctmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
-				if (not ctmp) {
-					return ctmp;
-				}
-				auto& tmp = *ctmp;
-				if (tmp.empty()) {
-					continue;
-				}
-				if (not params.empty()) {
-					params += ", "sv;
-				}
-
-				if (pcount & 1) {
-					params += formatter.decorate(Decoration::call_parameter_odd, tmp);
-				} else {
-					params += formatter.decorate(Decoration::call_parameter_even, tmp);
-				}
-				pcount++;
-			}
+		unsigned previous_params = 0;
+		auto params = format_function_parameters(res.comps, subs, tp, dv, formatter, ps, skip, previous_params, false, max_recursion);
+		if (not params) {
+			return params;
 		}
-
-		if (params != "void") {
-			result += params;
-		}
+		result += *params;
 		result += formatter.decorate(Decoration::call_parentheses, ")");
 
 		return result;
@@ -2974,10 +3060,10 @@ struct FormatDemangle<float_> {
 		(void)dv;
 		(void)subs;
 		(void)tp;
-
+		using StringType = typename Formatter::value_type;
 		const auto* p = std::get_if<std::string_view>(res.comps.data());
 		if (not p) {
-			return make_error();
+			return StringType(make_error());
 		}
 		return formatter.decorate(Decoration::number, *p);
 	}
@@ -2993,7 +3079,8 @@ struct FormatDemangle<nonneg_number> {
 
 		const auto* p = std::get_if<std::string_view>(res.comps.data());
 		if (not p) {
-			return make_error();
+			using StringType = typename Formatter::value_type;
+			return StringType(make_error());
 		}
 		return formatter.decorate(Decoration::number, *p);
 	}
@@ -3029,8 +3116,8 @@ struct FormatDemangle<name> {
 				return format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 			}
 		}
-
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 
 	template <typename Formatter>
@@ -3085,7 +3172,8 @@ struct FormatDemangle<negative_number> {
 				return "-" + *tmp;
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -3130,7 +3218,8 @@ typename Formatter::value_type format_hexfloat(F v, const DemanglingDialect& dv,
 			return formatter.decorate(Decoration::generic_italic, "nan");
 		}
 	}
-	return fmt::format("{:a}", v);
+	using StringType = typename Formatter::value_type;
+	return StringType(fmt::format("{:a}", v));
 }
 
 template <>
@@ -3139,6 +3228,7 @@ struct FormatDemangle<expr_primary> {
 	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
 		const ParseResult* p = nullptr;
 		const ParseResult* q = nullptr;
+		using StringType = typename Formatter::value_type;
 		if (max_recursion == 0) {
 			return std::unexpected(ParseError::recursion_reached);
 		}
@@ -3163,7 +3253,7 @@ struct FormatDemangle<expr_primary> {
 					return format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 				}
 			}
-			return make_error();
+			return StringType(make_error());
 		}
 
 		const auto* pp = std::get_if<ParseResult>(p->comps.data());
@@ -3189,7 +3279,7 @@ struct FormatDemangle<expr_primary> {
 				}
 			}
 			if (not pl or not qr) {
-				return make_error();
+				return StringType(make_error());
 			}
 
 			if (*pl == "b" and qr->type == nonneg_number) {
@@ -3201,22 +3291,22 @@ struct FormatDemangle<expr_primary> {
 					}
 				}
 				if (not qrl) {
-					return make_error();
+					return StringType(make_error());
 				}
 				if (*qrl == "0") {
-					return "false"s;
+					return StringType("false"sv);
 				}
 				if (*qrl == "1") {
-					return "true"s;
+					return StringType("true"sv);
 				}
-				return make_error();
+				return StringType(make_error());
 			}
 
 			if (*pl == "i") {
-				return format_demangled<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
+				return format_demangledp<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 			}
 			if (*pl == "j") {
-				auto tmp = format_demangled<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
+				auto tmp = format_demangledp<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return tmp;
 				}
@@ -3230,7 +3320,7 @@ struct FormatDemangle<expr_primary> {
 				return tmp;
 			}
 			if (*pl == "l") {
-				auto tmp = format_demangled<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
+				auto tmp = format_demangledp<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return tmp;
 				}
@@ -3244,7 +3334,7 @@ struct FormatDemangle<expr_primary> {
 				return tmp;
 			}
 			if (*pl == "m") {
-				auto tmp = format_demangled<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
+				auto tmp = format_demangledp<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return tmp;
 				}
@@ -3258,7 +3348,7 @@ struct FormatDemangle<expr_primary> {
 				return tmp;
 			}
 			if (*pl == "x") {
-				auto tmp = format_demangled<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
+				auto tmp = format_demangledp<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return tmp;
 				}
@@ -3272,7 +3362,7 @@ struct FormatDemangle<expr_primary> {
 				return tmp;
 			}
 			if (*pl == "y") {
-				auto tmp = format_demangled<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
+				auto tmp = format_demangledp<number>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return tmp;
 				}
@@ -3306,7 +3396,7 @@ struct FormatDemangle<expr_primary> {
 					if (not tmp0) {
 						return tmp0;
 					}
-					auto tmp1 = format_demangled<float_>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
+					auto tmp1 = format_demangledp<float_>(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 					if (not tmp1) {
 						return tmp1;
 					}
@@ -3382,7 +3472,6 @@ struct FormatDemangle<expr_primary> {
 		if (const auto* lz = std::get_if<std::string_view>(res.comps.data()); lz and *lz == "L_Z") {
 		}
 
-		using StringType = typename Formatter::value_type;
 		Stacked<StringType> pstack;
 		StringType result;
 		result += "(";
@@ -3445,10 +3534,10 @@ struct FormatDemangle<encoding> {
 		if (not nt.empty()) {
 			ntt.add(std::move(nt));
 		}
-
-		if (fc->rs == ReturnSignature::mangled_return_type) {
-			CompositeStack<StringType> result;
-			StringType ret;
+		CompositeStack<StringType> result;
+		bool explicit_object_param = false;
+		StringType ret;
+		if (fc->rs == ReturnSignature::mangled_return_type and dv.return_type_style != ReturnTypeStyle::no_return) {
 			for (const auto& cq : q->comps) {
 				const auto* x = std::get_if<ParseResult>(&cq);
 				if (x) {
@@ -3462,156 +3551,36 @@ struct FormatDemangle<encoding> {
 					break;
 				}
 			}
-
-			bool explicit_object_param = false;
-			if (p->type == name) {
-				auto full_name = format_mangled(res);
-				auto nominal_name = format_mangled(*p);
-				formatter.add_replacement(nominal_name, full_name);
-
-				const auto* pq = std::get_if<ParseResult>(p->comps.data());
-				if (not pq) {
-					return make_error();
-				}
-				if (pq->type == nested_name) {
-					const auto* e = std::get_if<ParseResult>(&pq->comps[1]);
-					if (e and e->type == explicit_object_member) {
-						explicit_object_param = true;
-					}
-					auto tmp = format_demangled<nested_name>(*pq, subs, tp, dv, formatter, ps, skip, max_recursion);
-					if (not tmp) {
-						return std::unexpected(tmp.error());
-					}
-					result = *tmp;
-				} else if (pq->type == local_name) {
-					auto tmp = format_demangled<local_name>(*pq, subs, tp, dv, formatter, ps, skip, max_recursion);
-					if (not tmp) {
-						return std::unexpected(tmp.error());
-					}
-					result = *tmp;
-				} else {
-					auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
-					if (not tmp) {
-						return tmp;
-					}
-					result = std::move(*tmp);
-				}
-				formatter.drop_replacement(nominal_name);
-			} else {
-				return make_error();
-			}
-			result.head = formatter.decorate(Decoration::function_name, result.head);
-
-			if (dv.return_type_style == ReturnTypeStyle::leading_return) {
-				result.head = ret + " " + result.head;
-			} else if (dv.return_type_style == ReturnTypeStyle::trailing_return_leading_auto) {
-				result.head = formatter.decorate(Decoration::type_keyword, "auto") + " " + result.head;
-			}
-
-			StringType params;
-			result += formatter.decorate(Decoration::call_parentheses, "(");
-
-			bool had_return = false;
-			bool first = true;
-			size_t pcount = 0;
-			for (const auto& cq : q->comps) {
-				const auto* x = std::get_if<ParseResult>(&cq);
-				if (x) {
-					if (not had_return) {
-						had_return = true;
-						continue;
-					}
-					Stacked<StringType> pstack;
-					auto ctmp = compose(format_demangled_type(*x, subs, ntt, dv, formatter, pstack, ps, skip, max_recursion));
-					if (not ctmp) {
-						return ctmp;
-					}
-					auto& tmp = *ctmp;
-					if (tmp.empty()) {
-						continue;
-					}
-
-					if (first) {
-						first = false;
-						if (explicit_object_param) {
-							params += formatter.decorate(Decoration::keyword, "this");
-							params += ' ';
-						}
-					} else {
-						params += ", ";
-					}
-
-					if (pcount >= dv.max_function_parameters) {
-						params += ".";
-						break;
-					}
-
-					if (pcount & 1) {
-						params += formatter.decorate(Decoration::call_parameter_odd, tmp);
-					} else {
-						params += formatter.decorate(Decoration::call_parameter_even, tmp);
-					}
-					pcount++;
-				}
-			}
-
-			if (params != "void") {
-				result += params;
-			}
-			result += formatter.decorate(Decoration::call_parentheses, ")");
-			if (not result.tail.empty()) {
-				result.head += ' ';
-				result.head += std::move(result.tail);
-			}
-
-			if (dv.return_type_style == ReturnTypeStyle::trailing_return or dv.return_type_style == ReturnTypeStyle::trailing_return_leading_auto) {
-				result.head += " -> ";
-				result.head += ret;
-			}
-
-			auto& fin = result.head;
-
-			if (r) {
-				fin += ' ';
-				auto tdv = dv;
-				if (dv.compiler_dialect == CompilerDialect::clang) {
-					tdv.resolve_template_args = false;
-				}
-				auto tmp = format_demangled(*r, subs, ntt, tdv, formatter, ps, skip, max_recursion);
-				if (not tmp) {
-					return tmp;
-				}
-				fin += *tmp;
-			}
-			return fin;
 		}
-		CompositeStack<StringType> result;
-		bool explicit_object_param = false;
+
 		if (p->type == name) {
-			auto full_name = format_mangled(res);
-			auto nominal_name = format_mangled(*p);
-			formatter.add_replacement(nominal_name, full_name);
+			std::string nominal_name;
+			if (formatter.can_link()) {
+				auto full_name = format_mangled(res);
+				nominal_name = format_mangled(*p);
+				formatter.add_replacement(nominal_name, full_name);
+			}
 
 			const auto* pq = std::get_if<ParseResult>(p->comps.data());
 			if (not pq) {
-				return make_error();
+				return StringType(make_error());
 			}
 			if (pq->type == nested_name) {
 				const auto* e = std::get_if<ParseResult>(&pq->comps[1]);
 				if (e and e->type == explicit_object_member) {
 					explicit_object_param = true;
 				}
-				auto tmp = format_demangled<nested_name>(*pq, subs, tp, dv, formatter, ps, skip, max_recursion);
+				auto tmp = format_demangledp<nested_name>(*pq, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return std::unexpected(tmp.error());
 				}
-				result = std::move(*tmp);
+				result = *tmp;
 			} else if (pq->type == local_name) {
-				auto tmp = format_demangled<local_name>(*pq, subs, tp, dv, formatter, ps, skip, max_recursion);
+				auto tmp = format_demangledp<local_name>(*pq, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return std::unexpected(tmp.error());
 				}
-				result = std::move(*tmp);
+				result = *tmp;
 			} else {
 				auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
@@ -3619,62 +3588,44 @@ struct FormatDemangle<encoding> {
 				}
 				result = std::move(*tmp);
 			}
-			formatter.drop_replacement(nominal_name);
+			if (formatter.can_link()) {
+				formatter.drop_replacement(nominal_name);
+			}
+
 		} else {
-			return make_error();
+			return StringType(make_error());
 		}
 		result.head = formatter.decorate(Decoration::function_name, result.head);
 
-		StringType params;
-		result += formatter.decorate(Decoration::call_parentheses, "(");
-
-		bool first = true;
-		size_t pcount = 0;
-		for (const auto& cq : q->comps) {
-			const auto* x = std::get_if<ParseResult>(&cq);
-			if (x) {
-				Stacked<StringType> pstack;
-				auto ctmp = compose(format_demangled_type(*x, subs, ntt, dv, formatter, pstack, ps, skip, max_recursion));
-				if (not ctmp) {
-					return ctmp;
-				}
-				auto& tmp = *ctmp;
-				if (tmp.empty()) {
-					continue;
-				}
-				if (first) {
-					first = false;
-					if (explicit_object_param) {
-						params += formatter.decorate(Decoration::keyword, "this");
-						params += ' ';
-					}
-				} else {
-					params += ", ";
-				}
-
-				if (pcount >= dv.max_function_parameters) {
-					params += ".";
-					break;
-				}
-
-				if (pcount & 1) {
-					params += formatter.decorate(Decoration::call_parameter_odd, tmp);
-				} else {
-					params += formatter.decorate(Decoration::call_parameter_even, tmp);
-				}
-				pcount++;
+		if (fc->rs == ReturnSignature::mangled_return_type) {
+			if (dv.return_type_style == ReturnTypeStyle::leading_return) {
+				result.head = ret + " " + result.head;
+			} else if (dv.return_type_style == ReturnTypeStyle::trailing_return_leading_auto) {
+				result.head = formatter.decorate(Decoration::type_keyword, "auto") + " " + result.head;
 			}
 		}
 
-		if (params != "void") {
-			result += params;
+		result += formatter.decorate(Decoration::call_parentheses, "(");
+		unsigned previous_params = 0;
+		bool had_return = fc->rs != ReturnSignature::mangled_return_type;
+		auto params = format_function_parameters(*q, subs, ntt, dv, formatter, ps, skip, had_return, previous_params, explicit_object_param, max_recursion);
+		if (not params) {
+			return params;
 		}
+		result += *params;
 		result += formatter.decorate(Decoration::call_parentheses, ")");
-
 		if (not result.tail.empty()) {
 			result.head += ' ';
 			result.head += std::move(result.tail);
 		}
+
+		if (fc->rs == ReturnSignature::mangled_return_type) {
+			if (dv.return_type_style == ReturnTypeStyle::trailing_return or dv.return_type_style == ReturnTypeStyle::trailing_return_leading_auto) {
+				result.head += " -> ";
+				result.head += ret;
+			}
+		}
+
 		auto& fin = result.head;
 
 		if (r) {
@@ -3704,6 +3655,12 @@ struct FormatDemangle<overload_set> {
 
 		for (const auto& c : res.comps) {
 			if (const auto* p = std::get_if<ParseResult>(&c); p) {
+				if (formatter.can_link()) {
+					auto full_name = format_mangled(res);
+					auto nominal_name = format_mangled(*p);
+					formatter.add_replacement(nominal_name, full_name);
+				}
+
 				auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 				if (not tmp) {
 					return tmp;
@@ -3755,7 +3712,7 @@ struct FormatDemangle<local_name> {
 
 			const auto* qq = std::get_if<ParseResult>(q->comps.data());
 			if (qq and qq->type == nested_name) {
-				auto nn = format_demangled<nested_name>(*qq, subs, fresh_tp, ddv, formatter, ps, skip, max_recursion);
+				auto nn = format_demangledp<nested_name>(*qq, subs, fresh_tp, ddv, formatter, ps, skip, max_recursion);
 				if (not nn) {
 					return nn;
 				}
@@ -3822,32 +3779,15 @@ struct FormatDemangle<closure_type_name> {
 
 		StringType params;
 		params += '(';
-
-		bool first = true;
-		for (const auto& cq : q->comps) {
-			const auto* x = std::get_if<ParseResult>(&cq);
-			if (x) {
-				auto ctmp = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
-				if (not ctmp) {
-					return ctmp;
-				}
-				auto& tmp = *ctmp;
-				if (tmp.empty()) {
-					continue;
-				}
-				if (first) {
-					first = false;
-				} else {
-					params += ", "s;
-				}
-				params += tmp;
-			}
+		unsigned previous_params = 0;
+		auto pparams = format_function_parameters(q->comps, subs, tp, dv, formatter, ps, skip, previous_params, false, max_recursion);
+		if (not pparams) {
+			return pparams;
 		}
+		params += *pparams;
 
 		params += ')';
-		if (params == "(void)") {
-			params = "()";
-		}
+
 		ret += params;
 		if (dv.compiler_dialect == CompilerDialect::gcc) {
 			ret += '#';
@@ -3880,6 +3820,7 @@ struct FormatDemangle<requires_expression> {
 		if (max_recursion == 0) {
 			return std::unexpected(ParseError::recursion_reached);
 		}
+		using StringType = typename Formatter::value_type;
 		--max_recursion;
 		const auto* l = std::get_if<std::string_view>(res.comps.data());
 		for (const auto& c : res.comps) {
@@ -3888,7 +3829,7 @@ struct FormatDemangle<requires_expression> {
 				if (x->type == requirement_llvm) {
 					v.emplace_back(x);
 				} else {
-					return make_error();
+					return StringType(make_error());
 				}
 			}
 		}
@@ -3899,7 +3840,7 @@ struct FormatDemangle<requires_expression> {
 			}
 			return "{" + *tmp + ";}";
 		}
-		return make_error();
+		return StringType(make_error());
 	}
 };
 
@@ -3945,7 +3886,8 @@ struct FormatDemangle<requires_clause> {
 				return formatter.decorate(Decoration::keyword, "requires") + " " + *tmp;
 			}
 		}
-		return make_error();
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
 	}
 };
 
@@ -3998,7 +3940,7 @@ struct FormatDemangle<expression> {
 		if (v.size() == 2 and v[0]->type == unary_operator_name and v[0]->comps.size() == 1) {
 			const auto* x = std::get_if<std::string_view>(v[0]->comps.data());
 			if (not x) {
-				return make_error();
+				return StringType(make_error());
 			}
 			for (size_t i = 0; i < unsigned(ItaniumOperatorType::number_of_options); ++i) {
 				auto op = static_cast<ItaniumOperatorType>(i);
@@ -4032,7 +3974,7 @@ struct FormatDemangle<expression> {
 		if (v.size() == 4 and v[0]->type == ternary_operator_name and v[0]->comps.size() == 1) {
 			const auto* x = std::get_if<std::string_view>(v[0]->comps.data());
 			if (not x) {
-				return make_error();
+				return StringType(make_error());
 			}
 
 			StringType result;
@@ -4070,7 +4012,7 @@ struct FormatDemangle<expression> {
 		if (v.size() == 3 and v[0]->type == binary_operator_name and v[0]->comps.size() == 1) {
 			const auto* x = std::get_if<std::string_view>(v[0]->comps.data());
 			if (not x) {
-				return make_error();
+				return StringType(make_error());
 			}
 			for (size_t i = 0; i < unsigned(ItaniumOperatorType::number_of_options); ++i) {
 				auto op = static_cast<ItaniumOperatorType>(i);
@@ -4158,7 +4100,7 @@ struct FormatDemangle<expression> {
 			}
 		}
 
-		return make_error();
+		return StringType(make_error());
 	}
 };
 
@@ -4192,7 +4134,7 @@ struct FormatDemangle<prefix_operator_expression> {
 		if (v.size() == 1) {
 			const auto* x = std::get_if<std::string_view>(res.comps.data());
 			if (not x) {
-				return make_error();
+				return StringType(make_error());
 			}
 			for (size_t i = 0; i < unsigned(ItaniumOperatorType::number_of_options); ++i) {
 				auto op = static_cast<ItaniumOperatorType>(i);
@@ -4385,7 +4327,7 @@ struct FormatDemangle<call_expression> {
 			return result;
 		}
 
-		return make_error();
+		return StringType(make_error());
 	}
 };
 
@@ -4456,7 +4398,7 @@ struct FormatDemangle<conversion_expression> {
 			return tmp;
 		}
 
-		return make_error();
+		return StringType(make_error());
 	}
 };
 
@@ -4468,69 +4410,45 @@ struct FormatDemangle<pack_expression> {
 			return std::unexpected(ParseError::recursion_reached);
 		}
 		--max_recursion;
-		std::vector<const ParseResult*> v;
-		std::vector<std::string_view> vl;
+
 		using StringType = typename Formatter::value_type;
 
 		for (const auto& c : res.comps) {
-			const auto* x = std::get_if<ParseResult>(&c);
-			if (x) {
-				v.emplace_back(x);
-			}
-		}
-
-		for (const auto& c : res.comps) {
-			const auto* x = std::get_if<std::string_view>(&c);
-			if (x) {
-				vl.emplace_back(*x);
-			} else {
-				break;
-			}
-		}
-
-		if (v.size() == 1 and vl.size() == 1 and vl[0] == "sp") {
-			if (not dv.resolve_packs or not dv.resolve_template_args) {
-				auto tmp = format_demangled(*v[0], subs, tp, dv, formatter, ps, skip, max_recursion);
-				if (not tmp) {
-					return tmp;
+			if (const auto* p = std::get_if<ParseResult>(&c); p) {
+				auto ops = dv.resolve_packs ? get_pack_size(*p, subs, tp, max_recursion) : std::nullopt;
+				if (not ops) {
+					auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+					if (not tmp) {
+						return tmp;
+					}
+					return *tmp + "...";
 				}
-				return *tmp + "...";
-			}
-			for (const auto& c : res.comps) {
-				if (const auto* p = std::get_if<ParseResult>(&c); p) {
-					auto ops = get_pack_size(*p, subs, tp, max_recursion);
-					if (not ops) {
-						return StringType(make_error());
-					}
 
-					if (*ops == 0) {
-						return {};
-					}
-
-					StringType result;
-
-					for (int i = 0; i < *ops; ++i) {
-						PackSelector pi {i};
-						auto ctmp = format_demangled(*p, subs, tp, dv, formatter, pi, skip, max_recursion);
-						if (not ctmp) {
-							return ctmp;
-						}
-						auto& tmp = *ctmp;
-						if (tmp.empty()) {
-							continue;
-						}
-						if (not result.empty()) {
-							result += ", ";
-						}
-						result += tmp;
-					}
-					return result;
+				if (*ops == 0) {
+					return {};
 				}
+
+				StringType result;
+				for (int i = 0; i < *ops; ++i) {
+					PackSelector pi {i};
+					auto ctmp = format_demangled(*p, subs, tp, dv, formatter, pi, skip, max_recursion);
+					if (not ctmp) {
+						return ctmp;
+					}
+					auto& tmp = *ctmp;
+					if (tmp.empty()) {
+						continue;
+					}
+					if (not result.empty()) {
+						result += ", ";
+					}
+					result += tmp;
+				}
+				return result;
 			}
-			return StringType(make_error());
 		}
 
-		return make_error();
+		return StringType(make_error());
 	}
 };
 
@@ -4593,9 +4511,10 @@ struct FormatDemangle<unresolved_name_gcc> {
 			return std::unexpected(ParseError::recursion_reached);
 		}
 		--max_recursion;
+		using StringType = typename Formatter::value_type;
 
 		if (res.comps.size() < 2) {
-			return make_error();
+			return StringType(make_error());
 		}
 
 		const ParseResult* p = nullptr;
@@ -4615,7 +4534,7 @@ struct FormatDemangle<unresolved_name_gcc> {
 		}
 
 		if (not p or not q) {
-			return make_error();
+			return StringType(make_error());
 		}
 		auto tmp0 = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
 		if (not tmp0) {
@@ -4645,11 +4564,16 @@ struct FormatDemangle<mangled_name> {
 			if (x) {
 				std::expected<StringType, ParseError> tmp;
 				if (first) {
-					auto fullname = format_mangled(res);
-					auto nominal_name = format_mangled(*x);
-					formatter.add_replacement(nominal_name, fullname);
-					tmp = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
-					formatter.drop_replacement(nominal_name);
+					if (formatter.can_link()) {
+						auto fullname = format_mangled(res);
+						auto nominal_name = format_mangled(*x);
+						formatter.add_replacement(nominal_name, fullname);
+						tmp = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
+						formatter.drop_replacement(nominal_name);
+					} else {
+						tmp = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
+					}
+
 					first = false;
 				} else {
 					tmp = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
@@ -4672,7 +4596,7 @@ struct FormatDemangle<mangled_name> {
 };
 
 template <ProductionType ltype, typename Formatter>
-auto format_demangled(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
+auto format_demangledp(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
 	return FormatDemangle<ltype>::form(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 }
 
@@ -4758,127 +4682,127 @@ std::expected<typename Formatter::value_type, ParseError> format_demangled(const
 	using StringType = typename Formatter::value_type;
 	switch (res.type) {
 	case source_name:
-		return format_demangled<source_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<source_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case identifier:
-		return format_demangled<identifier>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<identifier>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case nested_name:
-		return compose(format_demangled<nested_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion));
+		return compose(format_demangledp<nested_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion));
 	case local_name:
-		return compose(format_demangled<local_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion));
+		return compose(format_demangledp<local_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion));
 	case template_args:
-		return format_demangled<template_args>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<template_args>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case substitution:
-		return format_demangled<substitution>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<substitution>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 
 	case template_param:
-		return format_demangled<template_param>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<template_param>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case operator_name:
-		return format_demangled<operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case abi_tags:
-		return format_demangled<abi_tags>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<abi_tags>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case negative_number:
-		return format_demangled<negative_number>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<negative_number>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case nonneg_number:
-		return format_demangled<nonneg_number>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<nonneg_number>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case number:
-		return format_demangled<number>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<number>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case expr_primary:
-		return format_demangled<expr_primary>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<expr_primary>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case encoding:
-		return format_demangled<encoding>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<encoding>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case partial_nested_name:
-		return format_demangled<partial_nested_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<partial_nested_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case unscoped_name:
-		return format_demangled<unscoped_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<unscoped_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case unary_operator_name:
-		return format_demangled<unary_operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<unary_operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case binary_operator_name:
-		return format_demangled<binary_operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<binary_operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case vtable:
-		return format_demangled<vtable>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<vtable>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case typeinfo:
-		return format_demangled<typeinfo>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<typeinfo>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case vtt:
-		return format_demangled<vtt>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<vtt>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case typeinfo_name_object:
-		return format_demangled<typeinfo_name_object>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<typeinfo_name_object>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case guard_variable:
-		return format_demangled<guard_variable>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<guard_variable>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case nonvirtual_thunk:
-		return format_demangled<nonvirtual_thunk>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<nonvirtual_thunk>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case virtual_covariant_thunk:
-		return format_demangled<virtual_covariant_thunk>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<virtual_covariant_thunk>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case virtual_thunk:
-		return format_demangled<virtual_thunk>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<virtual_thunk>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case construction_vtable:
-		return format_demangled<construction_vtable>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<construction_vtable>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case global_sub_for_mangled_name:
-		return format_demangled<global_sub_for_mangled_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<global_sub_for_mangled_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case closure_type_name:
-		return format_demangled<closure_type_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<closure_type_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 
 	case unresolved_name_gcc:
-		return format_demangled<unresolved_name_gcc>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<unresolved_name_gcc>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case template_arg_pack:
-		return format_demangled<template_arg_pack>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<template_arg_pack>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case expression:
-		return format_demangled<expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case requires_clause:
-		return format_demangled<requires_clause>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<requires_clause>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case requires_expression:
-		return format_demangled<requires_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<requires_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case conversion_operator_name:
-		return format_demangled<conversion_operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<conversion_operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case lambda_sig:
-		return format_demangled<lambda_sig>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<lambda_sig>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case vendor_specfic_suffix:
-		return format_demangled<vendor_specfic_suffix>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<vendor_specfic_suffix>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case mangled_name:
-		return format_demangled<mangled_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<mangled_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case unnamed_type_name:
-		return format_demangled<unnamed_type_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<unnamed_type_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case keyword_type_expression:
-		return format_demangled<keyword_type_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<keyword_type_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case keyword_cast_expression:
-		return format_demangled<keyword_cast_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<keyword_cast_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case keyword_expression:
-		return format_demangled<keyword_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<keyword_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case keyword_cast_operator:
-		return format_demangled<keyword_cast_operator>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<keyword_cast_operator>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case type_expression_operator:
-		return format_demangled<type_expression_operator>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<type_expression_operator>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case expression_operator:
-		return format_demangled<expression_operator>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<expression_operator>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case rethrow_expression:
-		return format_demangled<rethrow_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<rethrow_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case float_:
-		return format_demangled<float_>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<float_>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case bare_function_type:
-		return format_demangled<bare_function_type>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<bare_function_type>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case name:
-		return format_demangled<name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case function_param:
-		return format_demangled<function_param>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<function_param>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case unresolved_name:
-		return format_demangled<unresolved_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<unresolved_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case bind_expression:
-		return format_demangled<bind_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<bind_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case pack_expression:
-		return format_demangled<pack_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<pack_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case call_expression:
-		return format_demangled<call_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<call_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case conversion_expression:
-		return format_demangled<conversion_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<conversion_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case prefix_operator_expression:
-		return format_demangled<prefix_operator_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<prefix_operator_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case fold_left_expression:
-		return format_demangled<fold_left_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<fold_left_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case fold_right_expression:
-		return format_demangled<fold_right_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<fold_right_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case pack_indexing_expression:
-		return format_demangled<pack_indexing_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<pack_indexing_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case overload_set:
-		return format_demangled<overload_set>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+		return format_demangledp<overload_set>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 
 	case type:
 	case builtin_type:
@@ -5133,6 +5057,9 @@ ParseResult restore_substitutions_and_template_params(const ParseResult& r, cons
 }
 
 struct ItaniumXmlLinker {
+	bool can_link() const {
+		return true;
+	}
 	using value_type = std::string;
 	std::string link_target(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
 		auto tmp = restore_substitutions_and_template_params(res, subs, tp);
@@ -5169,12 +5096,81 @@ struct ItaniumXmlLinker {
 	PageConfig cfg;
 	bool no_linking = false;
 };
+struct ItaniumHighlightLinker {
+	bool can_link() const {
+		return true;
+	}
+	using value_type = HighlightedText;
+	std::string link_target(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
+		auto tmp = restore_substitutions_and_template_params(res, subs, tp);
+		auto true_mang = format_mangled(res);
+		auto tit = replacement.find(true_mang);
+		if (tit != replacement.end()) {
+			return fmt::format("/{}/{}", prefix, tit->second);
+		}
 
+		auto mang = format_mangled(tmp);
+
+		auto it = replacement.find(mang);
+		if (it != replacement.end()) {
+			return fmt::format("/{}/{}", prefix, it->second);
+		}
+		return fmt::format("/{}/{}", prefix, mang);
+	}
+	HighlightedTextSegment link_to(const ParseResult& res, HighlightedTextSegment tn, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
+		tn.hl.link = link_target(res, subs, tp);
+		return tn;
+	}
+	HighlightedText link_to(const ParseResult& res, HighlightedText tn, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
+		for (auto& ts : tn.sg) {
+			ts = link_to(res, ts, subs, tp);
+		}
+		return tn;
+	}
+	std::map<std::string, std::string> replacement;
+	void add_replacement(std::string a, const std::string& b) {
+		auto it = replacement.find(b);
+		if (it != replacement.end()) {
+			replacement.try_emplace(std::move(a), it->second);
+		} else {
+			replacement.try_emplace(std::move(a), b);
+		}
+	}
+	void drop_replacement(const std::string& a) {
+		replacement.erase(a);
+	}
+	std::string prefix;
+	PageConfig cfg;
+	bool no_linking = false;
+};
 using ItaniumXmlFormatter = Formatter<XmlDecorator, XmlEscaper, ItaniumXmlLinker>;
+using HighlightLinkFormatter = Formatter<HighlightDecorator, AsciiEscaper, ItaniumHighlightLinker>;
 
 std::expected<std::string, ParseError> format_demangled_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix) {
 	ItaniumXmlFormatter formatter;
 	formatter.linker.prefix = prefix;
+	PackSelector ps;
+	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+}
+
+std::expected<HighlightedText, ParseError> format_demangled_link_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
+	HighlightLinkFormatter formatter;
+	PackSelector ps;
+	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+}
+std::expected<std::string, ParseError> format_demangled_link_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, bool light_mode, std::string_view prefix) {
+	HighlightLinkFormatter formatter;
+	formatter.linker.prefix = prefix;
+	PackSelector ps;
+	auto tmp = format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	auto result = render_html(tmp, light_mode, formatter.linker.cfg.navigation);
+	return result;
+}
+
+using LengthOnlyFormatter = Formatter<LengthOnlyDecorator, LengthOnlyEscaper, NopLinker<LengthOnly>>;
+
+std::expected<LengthOnly, ParseError> format_demangled_ascii_length(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
+	LengthOnlyFormatter formatter;
 	PackSelector ps;
 	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 }

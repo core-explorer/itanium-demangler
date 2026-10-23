@@ -95,14 +95,22 @@ struct ColorFloatCmy {
 	}
 };
 
+enum class HighlightTags : uint8_t {
+	none,
+	odr
+};
+
 struct Highlight {
+	std::string link;
+	float alpha = 1.0f;
+
 	Color256Cmy fg;
 	Color256Cmy bg;
 	Color256Cmy ud;
 	UnderlineStyle ul = UnderlineStyle::none;
 	bool bold = false;
 	bool italic = false;
-	float alpha = 1.0f;
+	uint8_t tags = 0;
 };
 
 struct HighlightedTextSegment {
@@ -110,7 +118,7 @@ struct HighlightedTextSegment {
 	Highlight hl;
 	HighlightedTextSegment() = default;
 	HighlightedTextSegment(std::string_view a) : text(a) {}
-	HighlightedTextSegment(std::string_view a, const Highlight& b) : text(a), hl(b) {}
+	HighlightedTextSegment(std::string_view a, Highlight b) : text(a), hl(std::move(b)) {}
 
 	constexpr size_t size() const {
 		return text.size();
@@ -341,8 +349,9 @@ std::string render_cli(const HighlightedText& ht, bool light_mode);
 CompositeStack<std::string> render_cli(const CompositeStack<HighlightedText>& ht, bool light_mode);
 
 std::string render_html(const HighlightedText& ht, bool light_mode);
+std::string render_html(const HighlightedText& ht, bool light_mode, const Navigation& nav);
 CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& ht, bool light_mode);
-
+CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& ht, bool light_mode, const Navigation& nav);
 template <typename E>
 std::expected<std::string, E> render_cli(const std::expected<HighlightedText, E>& ht, bool light_mode) {
 	if (not ht) {
@@ -366,7 +375,13 @@ std::expected<std::string, E> render_html(const std::expected<HighlightedText, E
 	}
 	return render_html(*ht, light_mode);
 }
-
+template <typename E>
+std::expected<std::string, E> render_html(const std::expected<HighlightedText, E>& ht, bool light_mode, const Navigation& nav) {
+	if (not ht) {
+		return std::unexpected(ht.error());
+	}
+	return render_html(*ht, light_mode, nav);
+}
 template <typename E>
 std::expected<CompositeStack<std::string>, E> render_html(const std::expected<CompositeStack<HighlightedText>, E>& ht, bool light_mode) {
 	if (not ht) {
@@ -375,6 +390,13 @@ std::expected<CompositeStack<std::string>, E> render_html(const std::expected<Co
 	return render_html(*ht, light_mode);
 }
 
+template <typename E>
+std::expected<CompositeStack<std::string>, E> render_html(const std::expected<CompositeStack<HighlightedText>, E>& ht, bool light_mode, const Navigation& nav) {
+	if (not ht) {
+		return std::unexpected(ht.error());
+	}
+	return render_html(*ht, light_mode, nav);
+}
 using HighlightFormatter = Formatter<HighlightDecorator, AsciiEscaper, NopLinker<HighlightedText>>;
 
 }

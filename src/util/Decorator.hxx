@@ -4,6 +4,7 @@
 #include "../web/HtmlFormat.hxx"
 #include "../web/Hyperlink.hxx"
 #include "../web/PageConfig.hxx"
+
 namespace swartalf {
 
 enum class NameResolution : uint8_t {
@@ -47,6 +48,10 @@ struct XmlLinker {
 	std::string_view prefix;
 	PageConfig cfg;
 
+	bool can_link() const {
+		return true;
+	}
+
 	XmlLinker() = default;
 	XmlLinker(std::string_view p, const PageConfig& c) :
 	    prefix(p), cfg(c) {}
@@ -61,6 +66,9 @@ struct XmlLinker {
 };
 
 struct CuXmlLinker {
+	bool can_link() const {
+		return true;
+	}
 	std::string_view prefix;
 	PageConfig cfg;
 
@@ -98,6 +106,10 @@ struct NopLinker {
 		return tn;
 	}
 
+	static constexpr bool can_link() {
+		return false;
+	}
+
 	template <typename T, typename... Args>
 	static value_type link_to(const T&, const value_type& tn, Args&&...) {
 		return tn;
@@ -113,7 +125,6 @@ struct NopLinker {
 
 	void drop_replacement(const std::string&) {
 	}
-
 };
 
 using AsciiLinker = NopLinker<std::string>;
@@ -136,6 +147,10 @@ struct Formatter {
 	template <typename... Args>
 	auto link_to(Args&&... args) const {
 		return linker.link_to(std::forward<Args>(args)...);
+	}
+
+	bool can_link() const {
+		return linker.can_link();
 	}
 
 	template <typename... Args>
