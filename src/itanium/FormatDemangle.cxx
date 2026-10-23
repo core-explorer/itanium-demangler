@@ -1,5 +1,7 @@
 #include "FormatDemangle.hxx"
 #include "Base36.hxx"
+#include "CompositeString.hxx"
+#include "Decoration.hxx"
 #include "DemangleBasicType.hxx"
 #include "DemanglingDialect.hxx"
 #include "FormatAst.hxx"
@@ -301,6 +303,7 @@ struct FormatDemangle<pack_type> {
 			return std::unexpected(ParseError::recursion_reached);
 		}
 		--max_recursion;
+		auto cstack = stack;
 
 		if (not dv.resolve_template_args or not dv.resolve_packs) {
 			for (const auto& c : res.comps) {
@@ -318,7 +321,11 @@ struct FormatDemangle<pack_type> {
 			if (const auto* p = std::get_if<ParseResult>(&c); p) {
 				auto ops = get_pack_size(*p, subs, tp, max_recursion);
 				if (not ops) {
-					return StringType(make_error());
+					auto tmp = format_demangled_type(*p, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
+					if (not tmp) {
+						return tmp;
+					}
+					return *tmp + "...";
 				}
 
 				if (*ops == 0) {
@@ -328,8 +335,11 @@ struct FormatDemangle<pack_type> {
 				StringType result;
 
 				for (int i = 0; i < *ops; ++i) {
-					Stacked<StringType> pstack;
+					Stacked<StringType> pstack = cstack;
 					PackSelector pi {i};
+					if (ps.val != PackSelector::all and ps.val != pi.val) {
+						continue;
+					}
 					auto tmp = format_demangled_type(*p, subs, tp, dv, formatter, pstack, pi, skip, max_recursion);
 					if (not tmp) {
 						return tmp;
@@ -341,7 +351,11 @@ struct FormatDemangle<pack_type> {
 						result += ", ";
 					}
 					result += *compose(tmp);
+					for (size_t j = 0; j < stack.stack.size(); j++) {
+						stack.stack[j].invalidated |= pstack.stack[j].invalidated;
+					}
 				}
+
 				return result;
 			}
 		}
@@ -601,9 +615,7 @@ struct FormatDemangle<vector_type> {
 };
 
 template <typename Formatter>
-std::expected<
-    typename Formatter::value_type, ParseError>
-format_function_parameters(std::span<const std::variant<std::string_view, ParseResult>> comps, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, unsigned previous_params, bool explicit_object_param, RecursionLimit max_recursion) {
+std::expected<typename Formatter::value_type, ParseError> format_function_parameters(std::span<const std::variant<std::string_view, ParseResult>> comps, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, unsigned previous_params, bool explicit_object_param, RecursionLimit max_recursion) {
 	using StringType = typename Formatter::value_type;
 
 	if (comps.size() == 1) {
@@ -735,13 +747,19 @@ struct FormatDemangle<function_type> {
 		}
 
 		const ParseResult* q = nullptr;
+		const ParseResult* qdo = nullptr;
 
 		for (const auto& c : res.comps) {
 			const auto* x = std::get_if<ParseResult>(&c);
-			if (x) {
+			if (x and x->type == bare_function_type) {
 				q = x;
-				break;
 			}
+			if (x and x->type == exception_spec) {
+				qdo = x;
+			}
+		}
+		if (not q) {
+			return std::unexpected(ParseError::mismatched_literal);
 		}
 		CompositeStack<StringType> ret;
 		auto entry_depth = stack.stack.size();
@@ -768,6 +786,15 @@ struct FormatDemangle<function_type> {
 
 		pparams += *params;
 		pparams += formatter.decorate(Decoration::call_parentheses, ")");
+
+		if (qdo) {
+			pparams += ' ';
+			auto tmp = format_demangled(*qdo, subs, tp, dv, formatter, ps, skip, max_recursion);
+			if (not tmp) {
+				return std::unexpected(tmp.error());
+			}
+			pparams += *tmp;
+		}
 
 		auto partial = stack.partial_collapse(entry_depth);
 
@@ -1029,9 +1056,9 @@ std::optional<typename Formatter::value_type> form_simple_substitution(const std
 }
 
 template <>
-struct FormatDemangle<vendor_ext_arg_type_llm> {
+struct FormatDemangle<vendor_ext_arg_type_llvm> {
 	template <typename Formatter>
-	static std::expected<CompositeStack<typename Formatter::value_type>, ParseError> form_type(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, Stacked<typename Formatter::value_type>& stack, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
+	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
 		(void)dv;
 		if (max_recursion == 0) {
 			return std::unexpected(ParseError::recursion_reached);
@@ -1044,7 +1071,7 @@ struct FormatDemangle<vendor_ext_arg_type_llm> {
 
 		const ParseResult* p = nullptr;
 		const ParseResult* q = nullptr;
-		const ParseResult* r = nullptr;
+
 		for (const auto& c : res.comps) {
 			const auto* x = std::get_if<ParseResult>(&c);
 			if (x) {
@@ -1053,28 +1080,37 @@ struct FormatDemangle<vendor_ext_arg_type_llm> {
 				} else if (not q) {
 					q = x;
 
-				} else {
-					r = x;
 					break;
 				}
 			}
 		}
 
-		if (not p or not q or not r) {
+		if (not p or not q) {
 			return StringType(make_error());
 		}
 
-		auto result = format_demangled_type(*r, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
-		if (not result) {
-			return result;
-		}
 		auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+		auto tmq = format_demangled(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 		if (not tmp) {
 			return std::unexpected(tmp.error());
 		}
-		result->tail += formatter.decorate(Decoration::noise, "[" + *tmp + "]");
+		if (not tmq) {
+			return std::unexpected(tmq.error());
+		}
+		auto result = "[" + *tmp + ":";
+		for (const auto& c : q->comps) {
+			const auto* x = std::get_if<ParseResult>(&c);
+			if (x) {
+				auto tmx = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
+				if (not tmx) {
+					return std::unexpected(tmx.error());
+				}
+				result += *tmx;
+			}
+		}
 
-		return result;
+		result += "]";
+		return formatter.decorate(Decoration::noise, result);
 	}
 };
 
@@ -2494,10 +2530,12 @@ struct FormatDemangle<template_arg_pack> {
 		--max_recursion;
 		int pcount = 0;
 		PackSelector pa {PackSelector::all};
+		auto cstack = stack;
 		for (const auto& c : res.comps) {
 			if (const auto* p = std::get_if<ParseResult>(&c); p) {
 				if (ps.val == PackSelector::all or pcount == ps.val) {
-					auto ctmp = format_demangled_type(*p, subs, tp, dv, formatter, stack, pa, skip, max_recursion);
+					auto pstack = cstack;
+					auto ctmp = format_demangled_type(*p, subs, tp, dv, formatter, pstack, pa, skip, max_recursion);
 					if (not ctmp) {
 						return ctmp;
 					}
@@ -2513,6 +2551,9 @@ struct FormatDemangle<template_arg_pack> {
 						result += formatter.decorate(Decoration::template_parameter_odd, tmp);
 					} else {
 						result += formatter.decorate(Decoration::template_parameter_even, tmp);
+					}
+					for (size_t j = 0; j < stack.stack.size(); ++j) {
+						stack.stack[j].invalidated |= pstack.stack[j].invalidated;
 					}
 				}
 				pcount++;
@@ -2906,9 +2947,43 @@ struct FormatDemangle<lambda_sig> {
 			return std::unexpected(ParseError::recursion_reached);
 		}
 		--max_recursion;
+
+		unsigned pskip = 0;
+		for (size_t i = 0; i < res.comps.size(); i++) {
+			const auto* x = std::get_if<ParseResult>(&res.comps[i]);
+			if (x and x->type == template_param_decl_llvm) {
+				pskip++;
+			} else {
+				break;
+			}
+		}
+
+		auto ntt = tp;
+		if (pskip > 0) {
+			TemplateParams tpb;
+			result += formatter.decorate(Decoration::template_brackets, "<");
+			for (size_t i = 0; i < pskip; i++) {
+				if (i) {
+					result += ", ";
+				}
+				const auto* x = std::get_if<ParseResult>(&res.comps[i]);
+				tpb.entries.emplace_back(*x);
+				Stacked<StringType> stack;
+				auto tmp = compose(format_demangled_type(*x, subs, tp, dv, formatter, stack, ps, skip, max_recursion));
+				if (not tmp) {
+					return tmp;
+				}
+				result += *tmp;
+			}
+			result += formatter.decorate(Decoration::template_brackets, ">");
+			ntt.add(std::move(tpb));
+		}
+
 		result += formatter.decorate(Decoration::call_parentheses, "(");
 		unsigned previous_params = 0;
-		auto params = format_function_parameters(res.comps, subs, tp, dv, formatter, ps, skip, previous_params, false, max_recursion);
+
+		auto comps = std::span<const std::variant<std::string_view, ParseResult>>(res.comps);
+		auto params = format_function_parameters(comps.subspan(pskip), subs, ntt, dv, formatter, ps, skip, previous_params, false, max_recursion);
 		if (not params) {
 			return params;
 		}
@@ -3006,7 +3081,33 @@ struct FormatDemangle<vendor_specfic_suffix> {
 		}
 	}
 };
+template <>
+struct FormatDemangle<exception_spec> {
+	template <typename Formatter>
+	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
+		const auto* l = std::get_if<std::string_view>(res.comps.data());
+		if (max_recursion == 0) {
+			return std::unexpected(ParseError::recursion_reached);
+		}
+		--max_recursion;
+		if (*l == "Do") {
+			return formatter.decorate(Decoration::keyword, "noexcept");
+		}
+		if (*l == "DO") {
+			const auto* x = std::get_if<ParseResult>(&res.comps[1]);
+			if (x) {
+				auto tmp = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
+				if (not tmp) {
+					return tmp;
+				}
+				return formatter.decorate(Decoration::keyword, "noexcept") + "(" + *tmp + ")";
+			}
+		}
 
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
+	}
+};
 template <>
 struct FormatDemangle<unnamed_type_name> {
 	template <typename Formatter>
@@ -3512,6 +3613,7 @@ struct FormatDemangle<encoding> {
 
 		const ParseResult* p = nullptr;
 		const ParseResult* q = nullptr;
+		const ParseResult* w = nullptr;
 		const ParseResult* r = nullptr;
 
 		for (const auto& c : res.comps) {
@@ -3519,10 +3621,12 @@ struct FormatDemangle<encoding> {
 			if (x) {
 				if (not p) {
 					p = x;
-				} else if (not q) {
+				} else if (x->type == vendor_ext_arg_type_llvm) {
+					w = x;
+				} else if (not q and x->type == bare_function_type) {
 					q = x;
 
-				} else {
+				} else if (q) {
 					r = x;
 					break;
 				}
@@ -3627,7 +3731,14 @@ struct FormatDemangle<encoding> {
 		}
 
 		auto& fin = result.head;
-
+		if (w) {
+			fin += ' ';
+			auto tmp = format_demangled(*w, subs, ntt, dv, formatter, ps, skip, max_recursion);
+			if (not tmp) {
+				return tmp;
+			}
+			fin += *tmp;
+		}
 		if (r) {
 			fin += ' ';
 			auto tdv = dv;
@@ -3777,18 +3888,12 @@ struct FormatDemangle<closure_type_name> {
 			ret += '\'';
 		}
 
-		StringType params;
-		params += '(';
-		unsigned previous_params = 0;
-		auto pparams = format_function_parameters(q->comps, subs, tp, dv, formatter, ps, skip, previous_params, false, max_recursion);
+		auto pparams = format_demangled(*q, subs, tp, dv, formatter, ps, skip, max_recursion);
 		if (not pparams) {
 			return pparams;
 		}
-		params += *pparams;
 
-		params += ')';
-
-		ret += params;
+		ret += *pparams;
 		if (dv.compiler_dialect == CompilerDialect::gcc) {
 			ret += '#';
 			if (not r) {
@@ -4803,7 +4908,10 @@ std::expected<typename Formatter::value_type, ParseError> format_demangled(const
 		return format_demangledp<pack_indexing_expression>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case overload_set:
 		return format_demangledp<overload_set>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
-
+	case exception_spec:
+		return format_demangledp<exception_spec>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	case vendor_ext_arg_type_llvm:
+		return format_demangledp<vendor_ext_arg_type_llvm>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case type:
 	case builtin_type:
 	case qualified_type: {
@@ -4873,12 +4981,8 @@ std::expected<CompositeStack<typename Formatter::value_type>, ParseError> format
 		return format_demangled_type<restrict_type>(res, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
 	case pointer_to_member_type:
 		return format_demangled_type<pointer_to_member_type>(res, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
-
-	case vendor_ext_arg_type_llm:
-		return format_demangled_type<vendor_ext_arg_type_llm>(res, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
 	case function_type:
 		return format_demangled_type<function_type>(res, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
-
 	case decltype_:
 		return format_demangled_type<decltype_>(res, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
 	case array_type:

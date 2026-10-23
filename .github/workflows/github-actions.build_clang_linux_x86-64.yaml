@@ -11,5 +11,9 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           sudo apt-get install libc++-dev
-          ./compile.sh -c
+          ./compile.sh -c -d
+      - name: test against llvm-demangler
+        run: |
+          cd ${{ github.workspace }}
+          readelf --wide -s ./target/x86_64-Debug-clang/itanium-demangle | grep -v Ut_C2 | ./target/x86_64-Debug-clang/itanium-demangle --check
       - run: echo "job status ${{ job.status }}."

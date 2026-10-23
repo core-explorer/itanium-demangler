@@ -104,7 +104,7 @@ enum class ProductionType : uint8_t {
 	call_expression,
 	mangled_name_apple,
 	prefix_operator_expression,
-	vendor_ext_arg_type_llm,
+	vendor_ext_arg_type_llvm,
 	negative_number,
 	template_arg_pack,
 	template_template_type,

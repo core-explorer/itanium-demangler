@@ -18,7 +18,7 @@ void add_rules(ProductionGrammar& rules) {
 	rules.add_rule<any_mangled_name>(mangled_name_apple);
 	rules.add_rule<any_mangled_name>(global_sub_for_mangled_name);
 
-	rules.add_rule<encoding>(name, bare_function_type, opt(requires_clause));
+	rules.add_rule<encoding>(name, opt(vendor_ext_arg_type_llvm), bare_function_type, opt(requires_clause));
 
 	rules.add_rule<data_encoding>(name);
 	rules.add_rule<data_encoding>(special_object);
@@ -212,10 +212,10 @@ void add_type_rules(ProductionGrammar& rules) {
 	rules.add_rule<qualified_type>(const_type);
 	rules.add_rule<qualified_type>(volatile_type);
 	rules.add_rule<qualified_type>(restrict_type);
-	rules.add_rule<qualified_type>(vendor_ext_arg_type_llm);
+	//rules.add_rule<qualified_type>(vendor_ext_arg_type_llm);
 	rules.add_rule<qualified_type>(extended_qualifier);
 	rules.add_rule<extended_qualifier>("U", source_name, type);
-	rules.add_rule<vendor_ext_arg_type_llm>("Ua", source_name, template_args, type);
+	rules.add_rule<vendor_ext_arg_type_llvm>("Ua", source_name, template_args);
 	rules.add_rule<const_type>("K", type);
 	rules.add_rule<volatile_type>("V", type);
 	rules.add_rule<restrict_type>("r", type);
@@ -469,7 +469,7 @@ void add_scope_rules(ProductionGrammar& rules) {
 void add_closure_rules(ProductionGrammar& rules) {
 	rules.add_rule<unnamed_type_name>(closure_type_name);
 	rules.add_rule<closure_type_name>("Ul", lambda_sig, "E", opt(nonneg_number), "_");
-	rules.add_rule<lambda_sig>(rep(type));
+	rules.add_rule<lambda_sig>(opt_rep(template_param_decl_llvm), rep(type));
 	rules.add_rule<local_name>("Z", encoding, "Ed", number, "_", name);
 
 	rules.add_rule<closure_prefix>("M", closure_type_name);

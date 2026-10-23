@@ -127,11 +127,12 @@ void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
 			}
 
 			auto num_params = get_max_num_function_and_template_parameters(*parsed, subs, nt, max_recursion);
-			dv.max_function_parameters = std::min(dv.max_function_parameters, num_params.first);
-			dv.max_template_parameters = std::min(dv.max_template_parameters, num_params.second);
 
 			std::expected<std::string, ParseError> eraw;
 			if (config.length < 100000) {
+				dv.max_function_parameters = std::min(dv.max_function_parameters, num_params.first);
+				dv.max_template_parameters = std::min(dv.max_template_parameters, num_params.second);
+
 				auto elraw = format_demangled_ascii_limit(config.length, *parsed, subs, nt, dv, skip, max_recursion);
 				if (elraw) {
 					dv = elraw->second;

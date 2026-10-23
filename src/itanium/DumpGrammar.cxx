@@ -116,7 +116,7 @@ std::array<std::string_view, 126> production_names = {
     "call_expression",
     "mangled_name_apple",
     "prefix_operator_expression",
-    "vendor_ext_arg_type_llm",
+    "vendor_ext_arg_type_llvm",
     "negative_number",
     "template_arg_pack",
     "template_template_type",

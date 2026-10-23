@@ -1,6 +1,7 @@
 #include "FormatAst.hxx"
 #include "FormatMangle.hxx"
 #include "Grammar.hxx"
+#include "ProductionType.hxx"
 
 namespace swartalf::itanium {
 using enum ProductionType;
@@ -177,6 +178,9 @@ void build_substitution_table(const ParseResult& res, SubstitutionTable& subs, c
 							}
 							if (comps[j].type == template_args) {
 								build_substitution_table(comps[j], subs, tp, false);
+							}
+							if (comps[j].type == unqualified_name) {
+								build_substitution_types(comps[j], subs, tp);
 							}
 						}
 					}
