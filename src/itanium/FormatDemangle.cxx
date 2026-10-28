@@ -1,7 +1,5 @@
 #include "FormatDemangle.hxx"
 #include "Base36.hxx"
-#include "CompositeString.hxx"
-#include "Decoration.hxx"
 #include "DemangleBasicType.hxx"
 #include "DemanglingDialect.hxx"
 #include "FormatAst.hxx"
@@ -12,15 +10,12 @@
 #include "LengthOnly.hxx"
 #include "ParseName.hxx"
 #include "ParseResult.hxx"
-#include "ProductionType.hxx"
 #include "../cli/CliDecorator.hxx"
+#include "../util/Decoration.hxx"
 #include "../util/split.hxx"
 #include "../util/string.hxx"
 #include <cstring>
-#include <expected>
-#include <optional>
-#include <string_view>
-#include <variant>
+
 namespace swartalf::itanium {
 using enum ProductionType;
 using namespace std::string_literals;
@@ -2091,7 +2086,15 @@ struct FormatDemangle<unscoped_name> {
 				if (not tmp) {
 					return tmp;
 				}
-				return formatter.link_to(res, *tmp, subs, tp);
+				auto man = format_mangled(res);
+				auto itags = skip.tags.find(man);
+				auto result = formatter.link_to(res, *tmp, subs, tp);
+				if (itags != skip.tags.end()) {
+					for (auto t : itags->second) {
+						formatter.tag(result, t);
+					}
+				}
+				return result;
 			}
 		}
 		using StringType = typename Formatter::value_type;

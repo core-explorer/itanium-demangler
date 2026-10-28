@@ -24,7 +24,7 @@ set(CMAKE_CXX_COMPILER_RANLIB ${EMRANLIB})
 set(CMAKE_RANLIB ${EMRANLIB})
 
 
-add_compile_options( -mbulk-memory )
+add_compile_options( -mbulk-memory)
 add_compile_options( --target=wasm64 -m64)
 add_link_options(-sASSERTIONS=1 -sWASM_BIGINT)
 add_link_options( -sSTACK_SIZE=4194304 )

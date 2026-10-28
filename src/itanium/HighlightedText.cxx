@@ -1,6 +1,6 @@
 #include "HighlightedText.hxx"
 
-namespace swartalf {
+namespace swartalf::itanium {
 
 HighlightedText HighlightDecorator::decorate(Decoration deco, const HighlightedText& tn, unsigned level) {
 	HighlightedText result;
@@ -264,6 +264,10 @@ std::string render_html(const HighlightedTextSegment& ht, bool light_mode) {
 
 	style += "\"";
 
+	if (hl.tags.contains(HighlightTags::odr)) {
+		return fmt::format("<span {}>{}</span>", style, escape_xml(text) + "[ODR]");
+	}
+
 	return fmt::format("<span {}>{}</span>", style, escape_xml(text));
 }
 
@@ -294,6 +298,9 @@ std::string render_html(const HighlightedTextSegment& ht, bool light_mode, const
 	style += "\"";
 
 	auto disp = fmt::format("<span {}>{}</span>", style, escape_xml(text));
+	if (hl.tags.contains(HighlightTags::odr)) {
+		disp += "<span class=\"tag odr\">ODR</span>";
+	}
 	if (not hl.link.empty()) {
 		return hyperlink(hl.link, disp, nav);
 	}

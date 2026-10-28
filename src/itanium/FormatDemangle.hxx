@@ -1,10 +1,13 @@
 #pragma once
 
-#include "CompositeString.hxx"
+#include "CompositeStack.hxx"
 #include "DemanglingDialect.hxx"
 #include "FormatAst.hxx"
 #include "LengthOnly.hxx"
+#include "../util/FlagSet.hxx"
+#include "../util/HighlightTags.hxx"
 #include <string_view>
+
 namespace swartalf::itanium {
 
 enum class SkipAction : uint8_t {
@@ -29,6 +32,7 @@ struct DefaultTemplateParamater {
 struct SkipSpec {
 	std::vector<SkipAlternative> skip;
 	std::vector<DefaultTemplateParamater> defaults;
+	std::unordered_map<std::string, FlagSet<HighlightTags>> tags;
 };
 
 template <typename Formatter>

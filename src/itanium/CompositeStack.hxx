@@ -1,5 +1,5 @@
 #pragma once
-#include "Decoration.hxx"
+#include "../util/Decoration.hxx"
 #include "../util/format.hxx"
 #include <expected>
 #include <string>

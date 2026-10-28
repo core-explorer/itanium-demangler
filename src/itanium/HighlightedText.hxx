@@ -1,9 +1,11 @@
 #pragma once
-#include "CompositeString.hxx"
+#include "CompositeStack.hxx"
 #include "../cli/cli_color256.hxx"
 #include "../util/Decorator.hxx"
+#include "../util/FlagSet.hxx"
+#include "../util/HighlightTags.hxx"
 
-namespace swartalf {
+namespace swartalf::itanium {
 
 enum class UnderlineStyle : uint8_t {
 	none,
@@ -95,11 +97,6 @@ struct ColorFloatCmy {
 	}
 };
 
-enum class HighlightTags : uint8_t {
-	none,
-	odr
-};
-
 struct Highlight {
 	std::string link;
 	float alpha = 1.0f;
@@ -110,7 +107,7 @@ struct Highlight {
 	UnderlineStyle ul = UnderlineStyle::none;
 	bool bold = false;
 	bool italic = false;
-	uint8_t tags = 0;
+	FlagSet<HighlightTags> tags;
 };
 
 struct HighlightedTextSegment {
@@ -342,6 +339,15 @@ struct HighlightDecorator {
 	template <size_t N>
 	HighlightedTextSegment decorate(Decoration deco, const char (&tn)[N], unsigned level = 0) {
 		return decorate(deco, std::string_view(tn), level);
+	}
+
+	void tag(HighlightedTextSegment& ts, HighlightTags htag) const {
+		ts.hl.tags.insert(htag);
+	}
+	void tag(HighlightedText& ts, HighlightTags htag) const {
+		for (auto& sg : ts.sg) {
+			tag(sg, htag);
+		}
 	}
 };
 

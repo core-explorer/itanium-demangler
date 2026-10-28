@@ -1,6 +1,7 @@
 #pragma once
+#include "Decoration.hxx"
+#include "HighlightTags.hxx"
 #include "ascii.hxx"
-#include "../itanium/Decoration.hxx"
 #include "../web/HtmlFormat.hxx"
 #include "../web/Hyperlink.hxx"
 #include "../web/PageConfig.hxx"
@@ -35,6 +36,9 @@ inline swartalf::Unsanitized<std::string_view> getUntemplatedName(swartalf::Unsa
 struct XmlDecorator {
 	using value_type = std::string;
 	static std::string decorate(Decoration deco, std::string_view tn, unsigned level = 0);
+	template <typename... Args>
+	void tag(Args&&...) const {
+	}
 };
 struct XmlEscaper {
 	static std::string escape(std::string_view tn) {
@@ -86,6 +90,9 @@ struct AsciiDecorator {
 	using value_type = std::string;
 	static constexpr value_type decorate(Decoration, std::string_view tn, unsigned = 0) {
 		return std::string(tn);
+	}
+	template <typename... Args>
+	void tag(Args&&...) const {
 	}
 };
 
@@ -139,6 +146,11 @@ struct Formatter {
 	Escaper escaper;
 	Linker linker;
 	using value_type = typename Decorator::value_type;
+
+	template <typename... Args>
+	void tag(Args&&... args) const {
+		decorator.tag(std::forward<Args>(args)...);
+	}
 
 	template <typename... Args>
 	Formatter(Args&&... args) :

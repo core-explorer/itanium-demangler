@@ -1,5 +1,5 @@
 #pragma once
-#include "Decoration.hxx"
+#include "../util/Decoration.hxx"
 #include <string>
 #include <string_view>
 namespace swartalf::itanium {
@@ -90,6 +90,9 @@ struct LengthOnlyDecorator {
 
 	constexpr LengthOnly decorate(Decoration, const LengthOnly& ts, unsigned = 0) const {
 		return ts;
+	}
+	template <typename... Args>
+	void tag(Args&&...) const {
 	}
 };
 
