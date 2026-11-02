@@ -2,7 +2,7 @@
 #include "Base36.hxx"
 #include <array>
 
-namespace swartalf {
+namespace swartalf::itanium {
 
 namespace {
 constexpr std::array<char, 36> base36_chars = {

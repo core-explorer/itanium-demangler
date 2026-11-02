@@ -1,31 +1,26 @@
 #include "FiltAnalyzer.hxx"
 #include "Base36.hxx"
 #include "DemanglingDialect.hxx"
-#include "FormatAst.hxx"
 #include "FormatDemangle.hxx"
 #include "FormatDemangleLimit.hxx"
 #include "FormatMangle.hxx"
-#include "Grammar.hxx"
 #include "ItaniumDemangler.hxx"
 #include "ParseName.hxx"
+#include "ParseResult.hxx"
+#include "RelativeDemangle.hxx"
 #include "../cli/cli_color.hxx"
 #include "../util/print.hxx"
 #include "../util/split.hxx"
 #include <cxxabi.h>
 #include <iostream>
 
-namespace swartalf {
-using namespace itanium;
+namespace swartalf::itanium {
+namespace {
 ItaniumDemangler demang;
-void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
-	auto cat = config.category;
-	auto dialect = config.dialect;
-	auto remangle = config.remangle;
-	auto partial = config.partial;
-	auto light_mode = config.light_mode;
-	auto short_names = config.short_names;
-
+}
+DemanglingDialect FiltAnalyzerConfig::make_dialect() const {
 	DemanglingDialect dv;
+	const auto& config = *this;
 
 	dv.fundamental_name = FundamentalName::unsigned_int;
 	dv.literal_decoration = LiteralDecoration::noncaps;
@@ -58,7 +53,6 @@ void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
 	if (short_names) {
 		dv.hide_abi_suffix = true;
 		dv.hide_vendor_suffix = true;
-		dv.return_type_style = ReturnTypeStyle::no_return;
 		dv.float_template_constant_style = FloatTemplateConstantStyle::hexfloat_style;
 		dv.literal_decoration = LiteralDecoration::none;
 	}
@@ -72,12 +66,25 @@ void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
 		dv.resolve_function_signatures = false;
 	}
 
+	dv.max_function_parameters = config.function_params;
+	dv.max_template_parameters = config.template_params;
+	dv.relative_names = config.relative;
+	return dv;
+}
+
+void printWord(std::string_view word, const FiltAnalyzerConfig& config) {
+	auto cat = config.category;
+	auto dialect = config.dialect;
+	auto remangle = config.remangle;
+	auto partial = config.partial;
+	auto light_mode = config.light_mode;
+	auto short_names = config.short_names;
+
+	DemanglingDialect dv = config.make_dialect();
+
 	if (config.debug) {
 		fmt::print("{}\n", std::string(italic(word)));
 	}
-
-	dv.max_function_parameters = config.function_params;
-	dv.max_template_parameters = config.template_params;
 
 	if ((cat != ProductionType::any_mangled_name) or word.starts_with("_Z") or word.starts_with("_GLOBAL__sub_I__Z") or word.starts_with("__Z") or word.starts_with("__GLOBAL__sub_I__Z")) {
 		auto& rules = demang.rules;

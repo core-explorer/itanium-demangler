@@ -53,7 +53,7 @@ std::string ArgParser::get_usage() const {
 
 void ArgParser::print_usage(FILE* stream) const {
 	auto usage = get_usage();
-	print(stream, "{}", usage);
+	fmt::print(stream, "{}", usage);
 }
 
 std::expected<ParsingResult, ParsingError> ArgParser::parse(int argc, char** argv) {

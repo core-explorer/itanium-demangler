@@ -2,6 +2,8 @@
 #include <bit>
 #include <cstddef>
 #include <type_traits>
+#include <utility>
+
 namespace swartalf {
 
 template <typename T, typename U = std::underlying_type_t<T>, size_t num_bits = 8 * sizeof(U)>

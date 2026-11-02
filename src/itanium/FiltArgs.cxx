@@ -21,7 +21,7 @@ ArgParser makeFiltParser() {
 	parser.option(o(version), "", "show version", ArgumentHandling::disabled);
 
 	parser.option(o(color), "", "use colored output, arg must be one of always|never|auto, defaults to auto", required);
-	parser.option(o(remangle), "-r", "demangle and remangle again");
+	parser.option(o(remangle), "", "demangle and remangle again");
 	parser.option(o(grammar), "-g", "dump grammar");
 	parser.option(o(partial), "-p", "allow partial parsing");
 	parser.option(o(light_mode), "-L", "change color scheme to light mode");
@@ -41,6 +41,7 @@ ArgParser makeFiltParser() {
 	parser.option(o(template_params), "", "maximum number of template parameters to display", required);
 	parser.option(o(check), "-c", "compare against demangler from linked C++ runtime library");
 	parser.option(o(terminal_width), "-W", "limit output to integer multiple of terminal width", required);
+	parser.option(o(relative), "-r", "use relative names");
 
 	return parser;
 }

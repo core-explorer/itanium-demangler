@@ -1,16 +1,17 @@
 add_library(swartalf-demangle-itaniumlib OBJECT
-ParseName.cxx
-Grammar.cxx
-FormatAst.cxx
-Parsed.cxx
-FormatMangle.cxx
-HighlightedText.cxx
+DemangleBasicType.cxx
 DumpGrammar.cxx
 FormatDemangle.cxx
-DemangleBasicType.cxx
-OptimizedGrammar.cxx
 FormatDemangleLimit.cxx
+FormatMangle.cxx
 FunctionClassification.cxx
+Grammar.cxx
+HighlightedText.cxx
+OptimizedGrammar.cxx
+Parsed.cxx
+ParseName.cxx
+RelativeDemangle.cxx
+SubstitutionTable.cxx
 )
 
 settings(swartalf-demangle-itaniumlib)
@@ -22,6 +23,7 @@ target_link_libraries(swartalf-demangle-itaniumlib PUBLIC swartalf::util  swarta
 add_library(swartalf-demanglelib STATIC 
 ItaniumDemangler.cxx
 Base36.cxx
+FiltAnalyzer.cxx
 )
 
 settings(swartalf-demanglelib)
@@ -31,7 +33,7 @@ target_link_libraries(swartalf-demanglelib PUBLIC swartalf::util  swartalf::dema
 
 
 add_library(swartalf-filt OBJECT 
-FiltAnalyzer.cxx
+
 FiltArgs.cxx
 FiltApp.cxx
 )

@@ -15,32 +15,11 @@ struct Color256 {
 	constexpr Color256(uint8_t red, uint8_t green, uint8_t blue) :
 	    r(red), g(green), b(blue) {}
 
+	static constexpr Color256 white() {
+		return Color256(255, 255, 255);
+	}
+
 	constexpr bool operator==(const Color256& other) const = default;
-};
-
-struct Color256Cmy {
-	uint8_t c = 0;
-	uint8_t m = 0;
-	uint8_t y = 0;
-	constexpr Color256Cmy() = default;
-	constexpr Color256Cmy(uint8_t cyan, uint8_t magenta, uint8_t yellow) :
-	    c(cyan), m(magenta), y(yellow) {}
-
-	explicit Color256Cmy(Color256 x) {
-		c = 255 - x.r;
-		m = 255 - x.g;
-		y = 255 - x.b;
-	}
-
-	explicit operator Color256() const {
-		Color256 x;
-		x.r = 255 - c;
-		x.g = 255 - m;
-		x.b = 255 - y;
-		return x;
-	}
-
-	constexpr bool operator==(const Color256Cmy& other) const = default;
 };
 
 constexpr int distl1(const Color256& a, const Color256& b) {

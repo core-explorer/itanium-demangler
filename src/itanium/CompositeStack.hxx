@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace swartalf {
+namespace swartalf::itanium {
 
 struct DecoratedString {
 	std::string decorated;

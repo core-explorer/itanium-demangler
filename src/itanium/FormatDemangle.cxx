@@ -1,16 +1,16 @@
 #include "FormatDemangle.hxx"
 #include "Base36.hxx"
+#include "CompositeStack.hxx"
 #include "DemangleBasicType.hxx"
 #include "DemanglingDialect.hxx"
-#include "FormatAst.hxx"
 #include "FormatMangle.hxx"
 #include "FunctionClassification.hxx"
-#include "Grammar.hxx"
 #include "HighlightedText.hxx"
 #include "LengthOnly.hxx"
 #include "ParseName.hxx"
 #include "ParseResult.hxx"
-#include "../cli/CliDecorator.hxx"
+#include "ProductionType.hxx"
+#include "RelativeDemangle.hxx"
 #include "../util/Decoration.hxx"
 #include "../util/split.hxx"
 #include "../util/string.hxx"
@@ -260,13 +260,13 @@ struct FormatDemangle<restrict_type> {
 			if (const auto* p = std::get_if<ParseResult>(&c); p) {
 				auto tmp = StringType(" "sv);
 				switch (dv.restrict_keyword) {
-				case swartalf::RestrictKeyword::no_underscore:
+				case RestrictKeyword::no_underscore:
 					tmp += formatter.decorate(Decoration::const_keyword, "restrict");
 					break;
-				case swartalf::RestrictKeyword::one_underscore:
+				case RestrictKeyword::one_underscore:
 					tmp += formatter.decorate(Decoration::const_keyword, "__restrict");
 					break;
-				case swartalf::RestrictKeyword::two_underscore:
+				case RestrictKeyword::two_underscore:
 					tmp += formatter.decorate(Decoration::const_keyword, "__restrict__");
 					break;
 				}
@@ -1565,7 +1565,7 @@ struct FormatDemangle<template_param> {
 		if (dv.compiler_dialect == CompilerDialect::clang) {
 			return StringType(formatter.decorate(Decoration::type_keyword, "auto"));
 		}
-		if (*p == "T_") {
+		if (*p == "T_" or (*p == "T" and res.comps.size() == 2 and std::holds_alternative<std::string_view>(res.comps[1]))) {
 			return formatter.decorate(Decoration::type_keyword, "auto") + ":1"s;
 		}
 		if (*p == "T" and res.comps.size() >= 2) {
@@ -1730,11 +1730,24 @@ struct FormatDemangle<function_param> {
 
 		const ParseResult* p = nullptr;
 		const std::string_view* q = std::get_if<std::string_view>(res.comps.data());
-		for (const auto& c : res.comps) {
-			if (const auto* x = std::get_if<ParseResult>(&c); x) {
-				p = x;
+
+		if (q and *q == "fL") {
+			const auto* level = std::get_if<ParseResult>(&res.comps[1]);
+			(void)level;
+			for (size_t i = 2; i < res.comps.size(); ++i) {
+				if (const auto* x = std::get_if<ParseResult>(&res.comps[i]); x) {
+					p = x;
+				}
+			}
+
+		} else {
+			for (const auto& c : res.comps) {
+				if (const auto* x = std::get_if<ParseResult>(&c); x) {
+					p = x;
+				}
 			}
 		}
+
 		if (dv.compiler_dialect == CompilerDialect::gcc) {
 			if (p and p->type == nonneg_number) {
 				const auto* pv = std::get_if<std::string_view>(p->comps.data());
@@ -2125,6 +2138,12 @@ struct FormatDemangle<nested_name> {
 			}
 		}
 
+		auto nskip = skip;
+		if (dv.relative_names) {
+			auto tskip = get_relative_names_from_nested_name(res);
+			nskip.skip.insert(nskip.skip.end(), tskip.skip.begin(), tskip.skip.end());
+		}
+
 		for (size_t i = 0; i < v.size(); ++i) {
 			const auto* p = v[i];
 			if (p->type == explicit_object_member) {
@@ -2199,7 +2218,12 @@ struct FormatDemangle<nested_name> {
 				}
 			}
 			if (not was_ctor_dtor) {
-				auto ctmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				std::expected<StringType, ParseError> ctmp;
+				if (((p->type == prefix or p->type == ProductionType::unqualified_name) and p->comps.size() == 2) or p->type == template_args) {
+					ctmp = format_demangled(*p, subs, tp, dv, formatter, ps, nskip, max_recursion);
+				} else {
+					ctmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				}
 
 				if (not ctmp) {
 					return ctmp;
@@ -3641,6 +3665,13 @@ struct FormatDemangle<encoding> {
 		if (not nt.empty()) {
 			ntt.add(std::move(nt));
 		}
+
+		auto nskip = skip;
+		if (dv.relative_names) {
+			auto tskip = get_relative_names(res);
+			nskip.skip.insert(nskip.skip.end(), tskip.skip.begin(), tskip.skip.end());
+		}
+
 		CompositeStack<StringType> result;
 		bool explicit_object_param = false;
 		StringType ret;
@@ -3649,7 +3680,7 @@ struct FormatDemangle<encoding> {
 				const auto* x = std::get_if<ParseResult>(&cq);
 				if (x) {
 					Stacked<StringType> pstack;
-					auto tmp = compose(format_demangled_type(*x, subs, ntt, dv, formatter, pstack, ps, skip, max_recursion));
+					auto tmp = compose(format_demangled_type(*x, subs, ntt, dv, formatter, pstack, ps, dv.return_type_style == ReturnTypeStyle::leading_return ? skip : nskip, max_recursion));
 					if (not tmp) {
 						return tmp;
 					}
@@ -3715,7 +3746,7 @@ struct FormatDemangle<encoding> {
 		result += formatter.decorate(Decoration::call_parentheses, "(");
 		unsigned previous_params = 0;
 		bool had_return = fc->rs != ReturnSignature::mangled_return_type;
-		auto params = format_function_parameters(*q, subs, ntt, dv, formatter, ps, skip, had_return, previous_params, explicit_object_param, max_recursion);
+		auto params = format_function_parameters(*q, subs, ntt, dv, formatter, ps, nskip, had_return, previous_params, explicit_object_param, max_recursion);
 		if (not params) {
 			return params;
 		}
@@ -3735,15 +3766,16 @@ struct FormatDemangle<encoding> {
 
 		auto& fin = result.head;
 		if (w) {
-			fin += ' ';
 			auto tmp = format_demangled(*w, subs, ntt, dv, formatter, ps, skip, max_recursion);
 			if (not tmp) {
 				return tmp;
 			}
+			if (not tmp->empty()) {
+				fin += ' ';
+			}
 			fin += *tmp;
 		}
 		if (r) {
-			fin += ' ';
 			auto tdv = dv;
 			if (dv.compiler_dialect == CompilerDialect::clang) {
 				tdv.resolve_template_args = false;
@@ -3751,6 +3783,9 @@ struct FormatDemangle<encoding> {
 			auto tmp = format_demangled(*r, subs, ntt, tdv, formatter, ps, skip, max_recursion);
 			if (not tmp) {
 				return tmp;
+			}
+			if (not tmp->empty()) {
+				fin += ' ';
 			}
 			fin += *tmp;
 		}
@@ -3921,6 +3956,48 @@ struct FormatDemangle<closure_type_name> {
 };
 
 template <>
+struct FormatDemangle<requirement> {
+	template <typename Formatter>
+	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
+		std::vector<const ParseResult*> v;
+		if (max_recursion == 0) {
+			return std::unexpected(ParseError::recursion_reached);
+		}
+		using StringType = typename Formatter::value_type;
+		--max_recursion;
+		if (res.comps.size() == 2) {
+			const auto* l = std::get_if<std::string_view>(res.comps.data());
+			const auto* p = std::get_if<ParseResult>(&res.comps[1]);
+			if (l and p and *l == "X") {
+				return format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+			}
+		}
+		if (res.comps.size() == 4) {
+			const auto* l = std::get_if<std::string_view>(res.comps.data());
+			const auto* p = std::get_if<ParseResult>(&res.comps[1]);
+			const auto* l2 = std::get_if<std::string_view>(&res.comps[2]);
+			const auto* q = std::get_if<ParseResult>(&res.comps[3]);
+			if (l and l2 and p and q and *l == "X" and *l2 == "R") {
+				auto tmp1 = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				if (not tmp1) {
+					return tmp1;
+				}
+				Stacked<StringType> stack;
+				auto tmp2 = compose(format_demangled_type(*q, subs, tp, dv, formatter, stack, ps, skip, max_recursion));
+				if (not tmp2) {
+					return tmp2;
+				}
+				if (dv.compiler_dialect == CompilerDialect::clang) {
+					return "{" + *tmp1 + "}" + " -> " + *tmp2;
+				}
+				return *tmp1 + " -> " + *tmp2;
+			}
+		}
+		return StringType(make_error());
+	}
+};
+
+template <>
 struct FormatDemangle<requires_expression> {
 	template <typename Formatter>
 	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
@@ -3934,7 +4011,7 @@ struct FormatDemangle<requires_expression> {
 		for (const auto& c : res.comps) {
 			const auto* x = std::get_if<ParseResult>(&c);
 			if (x) {
-				if (x->type == requirement_llvm) {
+				if (x->type == requirement) {
 					v.emplace_back(x);
 				} else {
 					return StringType(make_error());
@@ -3946,9 +4023,39 @@ struct FormatDemangle<requires_expression> {
 			if (not tmp) {
 				return tmp;
 			}
-			return "{" + *tmp + ";}";
+			return formatter.decorate(Decoration::keyword, "requires") + " { " + *tmp + "; }";
 		}
 		return StringType(make_error());
+	}
+};
+
+template <>
+struct FormatDemangle<initializer> {
+	template <typename Formatter>
+	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
+		std::vector<const ParseResult*> v;
+		if (max_recursion == 0) {
+			return std::unexpected(ParseError::recursion_reached);
+		}
+		using StringType = typename Formatter::value_type;
+		--max_recursion;
+		StringType result;
+
+		for (const auto& c : res.comps) {
+			const auto* x = std::get_if<ParseResult>(&c);
+			if (x) {
+				if (not result.empty()) {
+					result += ", ";
+				}
+				auto tmp = format_demangled(*x, subs, tp, dv, formatter, ps, skip, max_recursion);
+				if (not tmp) {
+					return tmp;
+				}
+				result += *tmp;
+			}
+		}
+
+		return result;
 	}
 };
 
@@ -4915,6 +5022,10 @@ std::expected<typename Formatter::value_type, ParseError> format_demangled(const
 		return format_demangledp<exception_spec>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case vendor_ext_arg_type_llvm:
 		return format_demangledp<vendor_ext_arg_type_llvm>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	case initializer:
+		return format_demangledp<initializer>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	case requirement:
+		return format_demangledp<requirement>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case type:
 	case builtin_type:
 	case qualified_type: {
@@ -5074,33 +5185,39 @@ std::expected<CompositeStack<std::string>, ParseError> format_demangled_type_asc
 	return format_demangled_type(res, subs, tp, dv, formatter, stack, ps, skip, max_recursion);
 }
 
-std::expected<HighlightedText, ParseError> format_demangled_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
-	HighlightFormatter formatter;
+std::expected<HighlightedText<HighlightLight>, ParseError> format_demangled_light_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
+	HighlightLightFormatter formatter;
+	PackSelector ps;
+	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+}
+
+std::expected<HighlightedText<HighlightDark>, ParseError> format_demangled_dark_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
+	HighlightDarkFormatter formatter;
 	PackSelector ps;
 	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 }
 
 std::expected<std::string, ParseError> format_demangled_cli_light(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
-	auto tmp = format_demangled_high(res, subs, tp, dv, skip, max_recursion);
-	auto result = render_cli(tmp, true);
+	auto tmp = format_demangled_light_high(res, subs, tp, dv, skip, max_recursion);
+	auto result = render_cli(tmp);
 	return result;
 }
 
 std::expected<std::string, ParseError> format_demangled_cli_dark(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
-	auto tmp = format_demangled_high(res, subs, tp, dv, skip, max_recursion);
-	auto result = render_cli(tmp, false);
+	auto tmp = format_demangled_dark_high(res, subs, tp, dv, skip, max_recursion);
+	auto result = render_cli(tmp);
 	return result;
 }
 
 std::expected<std::string, ParseError> format_demangled_html_light(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
-	auto tmp = format_demangled_high(res, subs, tp, dv, skip, max_recursion);
-	auto result = render_html(tmp, true);
+	auto tmp = format_demangled_light_high(res, subs, tp, dv, skip, max_recursion);
+	auto result = render_html(tmp);
 	return result;
 }
 
 std::expected<std::string, ParseError> format_demangled_html_dark(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
-	auto tmp = format_demangled_high(res, subs, tp, dv, skip, max_recursion);
-	auto result = render_html(tmp, false);
+	auto tmp = format_demangled_dark_high(res, subs, tp, dv, skip, max_recursion);
+	auto result = render_html(tmp);
 	return result;
 }
 
@@ -5203,11 +5320,13 @@ struct ItaniumXmlLinker {
 	PageConfig cfg;
 	bool no_linking = false;
 };
+
+template <typename HighlightType>
 struct ItaniumHighlightLinker {
 	bool can_link() const {
 		return true;
 	}
-	using value_type = HighlightedText;
+	using value_type = HighlightedText<HighlightType>;
 	std::string link_target(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
 		auto tmp = restore_substitutions_and_template_params(res, subs, tp);
 		auto true_mang = format_mangled(res);
@@ -5224,11 +5343,11 @@ struct ItaniumHighlightLinker {
 		}
 		return fmt::format("/{}/{}", prefix, mang);
 	}
-	HighlightedTextSegment link_to(const ParseResult& res, HighlightedTextSegment tn, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
+	HighlightedTextSegment<HighlightType> link_to(const ParseResult& res, HighlightedTextSegment<HighlightType> tn, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
 		tn.hl.link = link_target(res, subs, tp);
 		return tn;
 	}
-	HighlightedText link_to(const ParseResult& res, HighlightedText tn, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
+	HighlightedText<HighlightType> link_to(const ParseResult& res, HighlightedText<HighlightType> tn, const SubstitutionTableView& subs, const NestedTemplateParams& tp) const {
 		for (auto& ts : tn.sg) {
 			ts = link_to(res, ts, subs, tp);
 		}
@@ -5251,7 +5370,8 @@ struct ItaniumHighlightLinker {
 	bool no_linking = false;
 };
 using ItaniumXmlFormatter = Formatter<XmlDecorator, XmlEscaper, ItaniumXmlLinker>;
-using HighlightLinkFormatter = Formatter<HighlightDecorator, AsciiEscaper, ItaniumHighlightLinker>;
+using HighlightLightLinkFormatter = Formatter<HighlightDecorator<HighlightLight>, AsciiEscaper, ItaniumHighlightLinker<HighlightLight>>;
+using HighlightDarkLinkFormatter = Formatter<HighlightDecorator<HighlightDark>, AsciiEscaper, ItaniumHighlightLinker<HighlightDark>>;
 
 std::expected<std::string, ParseError> format_demangled_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix) {
 	ItaniumXmlFormatter formatter;
@@ -5260,17 +5380,33 @@ std::expected<std::string, ParseError> format_demangled_html(const ParseResult& 
 	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 }
 
-std::expected<HighlightedText, ParseError> format_demangled_link_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
-	HighlightLinkFormatter formatter;
+std::expected<HighlightedText<HighlightLight>, ParseError> format_demangled_link_light_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
+	HighlightLightLinkFormatter formatter;
 	PackSelector ps;
 	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 }
-std::expected<std::string, ParseError> format_demangled_link_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, bool light_mode, std::string_view prefix) {
-	HighlightLinkFormatter formatter;
+
+std::expected<HighlightedText<HighlightDark>, ParseError> format_demangled_link_dark_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
+	HighlightDarkLinkFormatter formatter;
+	PackSelector ps;
+	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+}
+
+std::expected<std::string, ParseError> format_demangled_link_light_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix) {
+	HighlightLightLinkFormatter formatter;
 	formatter.linker.prefix = prefix;
 	PackSelector ps;
 	auto tmp = format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
-	auto result = render_html(tmp, light_mode, formatter.linker.cfg.navigation);
+	auto result = render_html(tmp, formatter.linker.cfg.navigation);
+	return result;
+}
+
+std::expected<std::string, ParseError> format_demangled_link_dark_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix) {
+	HighlightDarkLinkFormatter formatter;
+	formatter.linker.prefix = prefix;
+	PackSelector ps;
+	auto tmp = format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	auto result = render_html(tmp, formatter.linker.cfg.navigation);
 	return result;
 }
 

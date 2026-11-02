@@ -2,7 +2,6 @@
 #include "FormatDemangle.hxx"
 #include "LengthOnly.hxx"
 #include "ParseResult.hxx"
-#include "ProductionType.hxx"
 
 namespace swartalf::itanium {
 

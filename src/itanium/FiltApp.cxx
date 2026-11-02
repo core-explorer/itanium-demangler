@@ -2,7 +2,6 @@
 #include "DemanglingDialect.hxx"
 #include "FiltAnalyzer.hxx"
 #include "FiltArgs.hxx"
-#include "ParseName.hxx"
 #include "ParseResult.hxx"
 #include "../cli/ArgParser.hxx"
 #include "../cli/ColorMode.hxx"
@@ -44,6 +43,9 @@ int FiltApp::run(const ParsingResult& parseResult) {
 			break;
 		case OptionName::subs:
 			config.subs = true;
+			break;
+		case OptionName::relative:
+			config.relative = true;
 			break;
 		case OptionName::debug:
 			config.debug = true;

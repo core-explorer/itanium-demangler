@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
-namespace swartalf {
+namespace swartalf::itanium {
 
 constexpr bool isDigitBase36(char c) {
 	return (c >= '0' and c <= '9') or (c >= 'A' and c <= 'Z');

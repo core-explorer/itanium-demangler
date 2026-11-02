@@ -1,6 +1,7 @@
 #pragma once
 #include "CompositeStack.hxx"
 #include "../cli/cli_color256.hxx"
+#include "../util/BitFlagSet.hxx"
 #include "../util/Decorator.hxx"
 #include "../util/FlagSet.hxx"
 #include "../util/HighlightTags.hxx"
@@ -50,72 +51,57 @@ struct ColorFloat {
 		c.b = std::min(255l, lrintf(b * 255.0f));
 		return c;
 	}
-};
 
-struct ColorFloatCmy {
-	float c = 0.0f;
-	float m = 0.0f;
-	float y = 0.0f;
-
-	constexpr ColorFloatCmy() = default;
-
-	constexpr ColorFloatCmy(float cyan, float magenta, float yellow) : c(cyan), m(magenta), y(yellow) {}
-
-	explicit constexpr ColorFloatCmy(const Color256Cmy& x) {
-		c = float(x.c) * (1.0f / 255.0f);
-		m = float(x.m) * (1.0f / 255.0f);
-		y = float(x.y) * (1.0f / 255.0f);
-	}
-
-	friend constexpr ColorFloatCmy operator*(const ColorFloatCmy& a, const ColorFloatCmy& b) {
-		ColorFloatCmy x;
-		x.c = a.c * b.c;
-		x.m = a.m * b.m;
-		x.y = a.y * b.y;
-		return x;
-	}
-	constexpr operator ColorFloat() const {
+	static ColorFloat cmy(float c, float m, float y) {
 		ColorFloat x;
 		x.r = 1.0f - c;
 		x.g = 1.0f - m;
 		x.b = 1.0f - y;
 		return x;
 	}
-
-	explicit constexpr ColorFloatCmy(const ColorFloat& x) {
-		c = 1.0f - x.r;
-		m = 1.0f - x.g;
-		y = 1.0f - x.b;
-	}
-
-	explicit constexpr operator Color256Cmy() const {
-		Color256Cmy x;
-		x.c = std::min(255l, lrintf(c * 255.0f));
-		x.m = std::min(255l, lrintf(m * 255.0f));
-		x.y = std::min(255l, lrintf(y * 255.0f));
-		return x;
-	}
 };
 
-struct Highlight {
+struct AbstractColor {
+	BitFlagSet<Decoration, uint32_t, 21> flags;
+	float even_tp = 1.0f;
+	float odd_tp = 1.0f;
+	float even_fp = 1.0f;
+	float odd_fp = 1.0f;
+};
+
+struct HighlightDark {
 	std::string link;
 	float alpha = 1.0f;
 
-	Color256Cmy fg;
-	Color256Cmy bg;
-	Color256Cmy ud;
+	Color256 fg = Color256::white();
+	Color256 bg = Color256::white();
+	Color256 ud = Color256::white();
 	UnderlineStyle ul = UnderlineStyle::none;
 	bool bold = false;
 	bool italic = false;
 	FlagSet<HighlightTags> tags;
 };
 
+struct HighlightLight {
+	std::string link;
+	float alpha = 1.0f;
+
+	AbstractColor ac;
+
+	UnderlineStyle ul = UnderlineStyle::none;
+	bool bold = false;
+	bool italic = false;
+	FlagSet<HighlightTags> tags;
+};
+
+template <typename HighlightType>
 struct HighlightedTextSegment {
 	std::string text;
-	Highlight hl;
+	HighlightType hl;
+	using highlight_type = HighlightType;
 	HighlightedTextSegment() = default;
 	HighlightedTextSegment(std::string_view a) : text(a) {}
-	HighlightedTextSegment(std::string_view a, Highlight b) : text(a), hl(std::move(b)) {}
+	HighlightedTextSegment(std::string_view a, HighlightType b) : text(a), hl(std::move(b)) {}
 
 	constexpr size_t size() const {
 		return text.size();
@@ -139,11 +125,12 @@ struct HighlightedTextSegment {
 	}
 };
 
+template <typename HighlightType>
 struct HighlightedText {
-	std::vector<HighlightedTextSegment> sg;
+	std::vector<HighlightedTextSegment<HighlightType>> sg;
 
 	HighlightedText() = default;
-	HighlightedText(const HighlightedTextSegment& t) {
+	HighlightedText(const HighlightedTextSegment<HighlightType>& t) {
 		sg.emplace_back(t);
 	}
 	HighlightedText(const std::string& t) {
@@ -183,17 +170,17 @@ struct HighlightedText {
 		}
 		return r;
 	}
-	HighlightedText& operator+=(const HighlightedTextSegment& ts) {
+	HighlightedText& operator+=(const HighlightedTextSegment<HighlightType>& ts) {
 		if (not ts.empty()) {
 			sg.emplace_back(ts);
 		}
 		return *this;
 	}
 	HighlightedText& operator+=(std::string_view ts) {
-		return *this += HighlightedTextSegment(ts);
+		return *this += HighlightedTextSegment<HighlightType>(ts);
 	}
 	HighlightedText& operator+=(const std::string& ts) {
-		return *this += HighlightedTextSegment(ts);
+		return *this += HighlightedTextSegment<HighlightType>(ts);
 	}
 	template <size_t N>
 	HighlightedText& operator+=(const char (&ts)[N]) {
@@ -293,116 +280,211 @@ struct HighlightedText {
 		sg.clear();
 	}
 };
-
-inline HighlightedText operator+(const HighlightedTextSegment& a, const HighlightedTextSegment& b) {
-	HighlightedText c;
+template <typename HighlightType>
+inline HighlightedText<HighlightType> operator+(const HighlightedTextSegment<HighlightType>& a, const HighlightedTextSegment<HighlightType>& b) {
+	HighlightedText<HighlightType> c;
 	c += a;
 	c += b;
 	return c;
 }
-
-inline HighlightedText operator+(const HighlightedTextSegment& a, std::string_view b) {
-	HighlightedText c;
+template <typename HighlightType>
+inline HighlightedText<HighlightType> operator+(const HighlightedTextSegment<HighlightType>& a, std::string_view b) {
+	HighlightedText<HighlightType> c;
 	c += a;
 	c += b;
 	return c;
 }
-inline HighlightedText operator+(std::string_view a, const HighlightedTextSegment& b) {
-	HighlightedText c;
+template <typename HighlightType>
+inline HighlightedText<HighlightType> operator+(std::string_view a, const HighlightedTextSegment<HighlightType>& b) {
+	HighlightedText<HighlightType> c;
 	c += a;
 	c += b;
 	return c;
 }
-template <size_t N>
-inline HighlightedText operator+(const HighlightedTextSegment& a, const char (&b)[N]) {
-	HighlightedText c;
+template <typename HighlightType, size_t N>
+inline HighlightedText<HighlightType> operator+(const HighlightedTextSegment<HighlightType>& a, const char (&b)[N]) {
+	HighlightedText<HighlightType> c;
 	c += a;
 	c += b;
 	return c;
 }
-template <size_t N>
-inline HighlightedText operator+(const char (&a)[N], const HighlightedTextSegment& b) {
-	HighlightedText c;
+template <typename HighlightType, size_t N>
+inline HighlightedText<HighlightType> operator+(const char (&a)[N], const HighlightedTextSegment<HighlightType>& b) {
+	HighlightedText<HighlightType> c;
 	c += a;
 	c += b;
 	return c;
 }
-
+template <typename HighlightType>
 struct HighlightDecorator {
-	using value_type = HighlightedText;
-	HighlightedTextSegment decorate(Decoration deco, std::string_view tn, unsigned level = 0);
-	HighlightedTextSegment decorate(Decoration deco, const std::string& tn, unsigned level = 0);
+	using value_type = HighlightedText<HighlightType>;
+	HighlightedTextSegment<HighlightType> decorate(Decoration deco, std::string_view tn, unsigned level = 0);
+	HighlightedTextSegment<HighlightType> decorate(Decoration deco, const std::string& tn, unsigned level = 0);
 
-	HighlightedTextSegment decorate(Decoration deco, const HighlightedTextSegment& ts, unsigned level = 0);
-	HighlightedText decorate(Decoration deco, const HighlightedText& tn, unsigned level = 0);
+	HighlightedTextSegment<HighlightType> decorate(Decoration deco, const HighlightedTextSegment<HighlightType>& ts, unsigned level = 0);
+	HighlightedText<HighlightType> decorate(Decoration deco, const HighlightedText<HighlightType>& tn, unsigned level = 0);
 
 	template <size_t N>
-	HighlightedTextSegment decorate(Decoration deco, const char (&tn)[N], unsigned level = 0) {
+	HighlightedTextSegment<HighlightType> decorate(Decoration deco, const char (&tn)[N], unsigned level = 0) {
 		return decorate(deco, std::string_view(tn), level);
 	}
 
-	void tag(HighlightedTextSegment& ts, HighlightTags htag) const {
+	void tag(HighlightedTextSegment<HighlightType>& ts, HighlightTags htag) const {
 		ts.hl.tags.insert(htag);
 	}
-	void tag(HighlightedText& ts, HighlightTags htag) const {
+	void tag(HighlightedText<HighlightType>& ts, HighlightTags htag) const {
 		for (auto& sg : ts.sg) {
 			tag(sg, htag);
 		}
 	}
 };
 
-std::string render_cli(const HighlightedText& ht, bool light_mode);
-CompositeStack<std::string> render_cli(const CompositeStack<HighlightedText>& ht, bool light_mode);
+template <typename HighlightType>
+std::string render_cli(const HighlightedText<HighlightType>& ht);
 
-std::string render_html(const HighlightedText& ht, bool light_mode);
-std::string render_html(const HighlightedText& ht, bool light_mode, const Navigation& nav);
-CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& ht, bool light_mode);
-CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& ht, bool light_mode, const Navigation& nav);
-template <typename E>
-std::expected<std::string, E> render_cli(const std::expected<HighlightedText, E>& ht, bool light_mode) {
-	if (not ht) {
-		return std::unexpected(ht.error());
-	}
-	return render_cli(*ht, light_mode);
-}
+template <typename HighlightType>
+CompositeStack<std::string> render_cli(const CompositeStack<HighlightedText<HighlightType>>& ht);
 
-template <typename E>
-std::expected<CompositeStack<std::string>, E> render_cli(const std::expected<CompositeStack<HighlightedText>, E>& ht, bool light_mode) {
-	if (not ht) {
-		return std::unexpected(ht.error());
-	}
-	return render_cli(*ht, light_mode);
-}
+template <typename HighlightType>
+std::string render_html(const HighlightedText<HighlightType>& ht);
 
-template <typename E>
-std::expected<std::string, E> render_html(const std::expected<HighlightedText, E>& ht, bool light_mode) {
+template <typename HighlightType>
+std::string render_html(const HighlightedText<HighlightType>& ht, const Navigation& nav);
+
+template <typename HighlightType>
+CompositeStack<std::string> render_html(const CompositeStack<HighlightedText<HighlightType>>& ht);
+template <typename HighlightType>
+CompositeStack<std::string> render_html(const CompositeStack<HighlightedText<HighlightType>>& ht, const Navigation& nav);
+template <typename E, typename HighlightType>
+std::expected<std::string, E> render_cli(const std::expected<HighlightedText<HighlightType>, E>& ht) {
 	if (not ht) {
 		return std::unexpected(ht.error());
 	}
-	return render_html(*ht, light_mode);
-}
-template <typename E>
-std::expected<std::string, E> render_html(const std::expected<HighlightedText, E>& ht, bool light_mode, const Navigation& nav) {
-	if (not ht) {
-		return std::unexpected(ht.error());
-	}
-	return render_html(*ht, light_mode, nav);
-}
-template <typename E>
-std::expected<CompositeStack<std::string>, E> render_html(const std::expected<CompositeStack<HighlightedText>, E>& ht, bool light_mode) {
-	if (not ht) {
-		return std::unexpected(ht.error());
-	}
-	return render_html(*ht, light_mode);
+	return render_cli(*ht);
 }
 
-template <typename E>
-std::expected<CompositeStack<std::string>, E> render_html(const std::expected<CompositeStack<HighlightedText>, E>& ht, bool light_mode, const Navigation& nav) {
+template <typename E, typename HighlightType>
+std::expected<CompositeStack<std::string>, E> render_cli(const std::expected<CompositeStack<HighlightedText<HighlightType>>, E>& ht) {
 	if (not ht) {
 		return std::unexpected(ht.error());
 	}
-	return render_html(*ht, light_mode, nav);
+	return render_cli(*ht);
 }
-using HighlightFormatter = Formatter<HighlightDecorator, AsciiEscaper, NopLinker<HighlightedText>>;
+
+template <typename E, typename HighlightType>
+std::expected<std::string, E> render_html(const std::expected<HighlightedText<HighlightType>, E>& ht) {
+	if (not ht) {
+		return std::unexpected(ht.error());
+	}
+	return render_html(*ht);
+}
+template <typename E, typename HighlightType>
+std::expected<std::string, E> render_html(const std::expected<HighlightedText<HighlightType>, E>& ht, const Navigation& nav) {
+	if (not ht) {
+		return std::unexpected(ht.error());
+	}
+	return render_html(*ht, nav);
+}
+template <typename E, typename HighlightType>
+std::expected<CompositeStack<std::string>, E> render_html(const std::expected<CompositeStack<HighlightedText<HighlightType>>, E>& ht) {
+	if (not ht) {
+		return std::unexpected(ht.error());
+	}
+	return render_html(*ht);
+}
+
+template <typename E, typename HighlightType>
+std::expected<CompositeStack<std::string>, E> render_html(const std::expected<CompositeStack<HighlightedText<HighlightType>>, E>& ht, const Navigation& nav) {
+	if (not ht) {
+		return std::unexpected(ht.error());
+	}
+	return render_html(*ht, nav);
+}
+
+template <typename HighlightType>
+HighlightedText<HighlightType> HighlightDecorator<HighlightType>::decorate(Decoration deco, const HighlightedText<HighlightType>& tn, unsigned level) {
+	HighlightedText<HighlightType> result;
+	result.sg.reserve(tn.sg.size());
+	for (const auto& t : tn.sg) {
+		result += decorate(deco, t, level);
+	}
+	return result;
+}
+
+template <typename HighlightType>
+HighlightedTextSegment<HighlightType> HighlightDecorator<HighlightType>::decorate(Decoration deco, std::string_view tn, unsigned level) {
+	HighlightedTextSegment<HighlightType> t;
+	t.text += tn;
+	return decorate(deco, t, level);
+}
+
+template <typename HighlightType>
+HighlightedTextSegment<HighlightType> HighlightDecorator<HighlightType>::decorate(Decoration deco, const std::string& tn, unsigned level) {
+	HighlightedTextSegment<HighlightType> t;
+	t.text += tn;
+	return decorate(deco, t, level);
+}
+
+std::string render_cli(const HighlightedTextSegment<HighlightLight>& ht);
+std::string render_cli(const HighlightedTextSegment<HighlightDark>& ht);
+
+template <typename HighlightType>
+std::string render_cli(const HighlightedText<HighlightType>& ht) {
+	std::string result;
+	for (const auto& t : ht.sg) {
+		result += render_cli(t);
+	}
+	return result;
+}
+
+template <typename HighlightType>
+std::string render_html(const HighlightedText<HighlightType>& ht) {
+	std::string result;
+	for (const auto& t : ht.sg) {
+		result += render_html(t);
+	}
+	return result;
+}
+
+template <typename HighlightType>
+std::string render_html(const HighlightedText<HighlightType>& ht, const Navigation& nav) {
+	std::string result;
+	for (const auto& t : ht.sg) {
+		result += render_html(t, nav);
+	}
+	return result;
+}
+
+template <typename HighlightType>
+CompositeStack<std::string> render_cli(const CompositeStack<HighlightedText<HighlightType>>& ht) {
+	CompositeStack<std::string> result;
+	result.head = render_cli(ht.head);
+	result.tail = render_cli(ht.tail);
+	return result;
+}
+
+std::string render_html(const HighlightedTextSegment<HighlightLight>& ht);
+std::string render_html(const HighlightedTextSegment<HighlightDark>& ht);
+template <typename HighlightType>
+std::string render_html(const HighlightedTextSegment<HighlightType>& ht, const Navigation& nav);
+
+template <typename HighlightType>
+CompositeStack<std::string> render_html(const CompositeStack<HighlightedText<HighlightType>>& ht) {
+	CompositeStack<std::string> result;
+	result.head = render_html(ht.head);
+	result.tail = render_html(ht.tail);
+	return result;
+}
+
+template <typename HighlightType>
+CompositeStack<std::string> render_html(const CompositeStack<HighlightedText<HighlightType>>& ht, const Navigation& nav) {
+	CompositeStack<std::string> result;
+	result.head = render_html(ht.head, nav);
+	result.tail = render_html(ht.tail, nav);
+	return result;
+}
+
+using HighlightLightFormatter = Formatter<HighlightDecorator<HighlightLight>, AsciiEscaper, NopLinker<HighlightedText<HighlightLight>>>;
+using HighlightDarkFormatter = Formatter<HighlightDecorator<HighlightDark>, AsciiEscaper, NopLinker<HighlightedText<HighlightDark>>>;
 
 }

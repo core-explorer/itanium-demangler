@@ -11,6 +11,7 @@
 AFL_FUZZ_INIT();
 
 using namespace swartalf;
+using namespace swartalf::itanium;
 
 int main(int argc, char** argv) {
 	(void)argc;

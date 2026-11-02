@@ -97,7 +97,7 @@ enum class ProductionType : uint8_t {
 	template_param_decl_llvm,
 	partial_nested_name,
 	requires_expression,
-	requirement_llvm,
+	requirement,
 	constrained_type_llvm,
 	type_constraint_llvm,
 	pack_expression,

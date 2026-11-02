@@ -8,6 +8,7 @@
 #include "../util/version.hxx"
 #include <atomic>
 #include <forward_list>
+#include <functional>
 #include <list>
 #include <memory>
 #include <sstream>
@@ -20,6 +21,7 @@
 #endif
 
 using namespace swartalf;
+using namespace swartalf::itanium;
 
 struct State {
 	std::atomic<size_t> done = 0;
@@ -29,12 +31,17 @@ struct State {
 
 	bool darkMode = false;
 	FiltAnalyzerConfig config;
+	State() {
+		config.dialect = CompilerDialect::clang;
+		config.short_names = true;
+		config.trailing = true;
+		config.relative = true;
+	}
 };
 
 std::unique_ptr<State> ustate;
 
 namespace swartalf {
-using namespace swartalf::itanium;
 
 void demangleText(std::string_view mangled) {
 	std::string demangled;
@@ -47,8 +54,9 @@ void demangleText(std::string_view mangled) {
 	bool must_consume = true;
 	auto parsed = parse_as(mangled, cat, max_recursion, indent, rules, must_consume);
 	SkipSpec skip;
-	DemanglingDialect dv;
+
 	auto& config = ustate->config;
+	DemanglingDialect dv = config.make_dialect();
 
 	if (parsed) {
 		SubstitutionTable su = build_substitution_table(*parsed);
@@ -88,7 +96,54 @@ void demangleText(std::string_view mangled) {
 	}
 
 	auto& escaped = demangled;
-	EM_ASM_({ document.getElementById('demangled').innerHTML = UTF8ToString($0, $1); }, escaped.data(), escaped.size());
+	EM_ASM_({ document.getElementById('demangled').innerHTML ="<code>"+ UTF8ToString($0, $1);+"</code>" }, escaped.data(), escaped.size());
+}
+
+void setCompilerDialect(int v) {
+	if (v == 1 or v == 2) {
+		ustate->config.dialect = CompilerDialect(v);
+	}
+}
+void setHideDetails(int v) {
+	if (v == 0 or v == 1) {
+		ustate->config.short_names = v;
+	}
+}
+
+void setResolveTemplates(int v) {
+	if (v == 0 or v == 1) {
+		ustate->config.templ = not v;
+	}
+}
+
+void setResolveSubstitutions(int v) {
+	if (v == 0 or v == 1) {
+		ustate->config.subs = not v;
+	}
+}
+
+void setResolveExpressions(int v) {
+	if (v == 0 or v == 1) {
+		ustate->config.expression = not v;
+	}
+}
+
+void setHideReturn(int v) {
+	if (v == 0 or v == 1) {
+		ustate->config.hide_return = v;
+	}
+}
+
+void setTrailingReturn(int v) {
+	if (v == 0 or v == 1) {
+		ustate->config.trailing = v;
+	}
+}
+
+void setRelativeNames(int v) {
+	if (v == 0 or v == 1) {
+		ustate->config.relative = v;
+	}
 }
 
 void setDarkMode(bool value) {
@@ -102,26 +157,38 @@ void setMaxLength(int nrows, int ncols) {
 }
 
 #ifdef __EMSCRIPTEN__
-
-extern "C" {
-EMSCRIPTEN_KEEPALIVE
-void setDarkMode(int val) {
+extern "C" EMSCRIPTEN_KEEPALIVE void setDarkMode(int val) {
 	swartalf::setDarkMode(val);
 }
+extern "C" EMSCRIPTEN_KEEPALIVE void setCompilerDialect(int val) {
+	swartalf::setCompilerDialect(val);
 }
-
-extern "C" {
-EMSCRIPTEN_KEEPALIVE
-void demangleText(const char* name1, int nlength1) {
+extern "C" EMSCRIPTEN_KEEPALIVE void setHideDetails(int val) {
+	swartalf::setHideDetails(val);
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void setHideReturn(int val) {
+	swartalf::setHideReturn(val);
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void setTrailingReturn(int val) {
+	swartalf::setTrailingReturn(val);
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void setResolveSubstitutions(int val) {
+	swartalf::setResolveSubstitutions(val);
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void setResolveTemplates(int val) {
+	swartalf::setResolveTemplates(val);
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void setResolveExpressions(int val) {
+	swartalf::setResolveExpressions(val);
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void setRelativeNames(int val) {
+	swartalf::setRelativeNames(val);
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void demangleText(const char* name1, int nlength1) {
 	swartalf::demangleText(std::string_view(name1, nlength1));
 }
-}
-
-extern "C" {
-EMSCRIPTEN_KEEPALIVE
-void setMaxLength(int nrows, int ncols) {
+extern "C" EMSCRIPTEN_KEEPALIVE void setMaxLength(int nrows, int ncols) {
 	swartalf::setMaxLength(nrows, ncols);
-}
 }
 #endif
 
@@ -137,6 +204,14 @@ void init_loop(void*) {
 		Module.demangleText = Module.cwrap('demangleText', null, [ 'number', 'number' ]);
 		Module.setMaxLength = Module.cwrap('setMaxLength', null, [ 'number', 'number' ]);
 		Module.setDarkMode = Module.cwrap('setDarkMode', null, ['number']);
+		Module.setCompilerDialect = Module.cwrap('setCompilerDialect', null, ['number']);
+		Module.setHideDetails = Module.cwrap('setHideDetails', null, ['number']);
+		Module.setHideReturn = Module.cwrap('setHideReturn', null, ['number']);
+		Module.setTrailingReturn = Module.cwrap('setTrailingReturn', null, ['number']);
+		Module.setResolveSubstitutions = Module.cwrap('setResolveSubstitutions', null, ['number']);
+		Module.setResolveTemplates = Module.cwrap('setResolveTemplates', null, ['number']);
+		Module.setResolveExpressions = Module.cwrap('setResolveExpressions', null, ['number']);
+		Module.setRelativeNames = Module.cwrap('setRelativeNames', null, ['number']);
 		is_emscripten_initialized = 1;
 		set_darkmode(darkmode);
 		if (pending_demangle) {

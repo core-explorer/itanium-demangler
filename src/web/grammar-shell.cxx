@@ -20,26 +20,22 @@
 #endif
 
 using namespace swartalf;
+using namespace swartalf::itanium;
 
 struct State {
 	std::atomic<size_t> done = 0;
 	Stream os;
-
 	std::string autonav;
-
 	bool darkMode = false;
-	FiltAnalyzerConfig config;
 };
 
 std::unique_ptr<State> ustate;
 
 namespace swartalf {
-using namespace swartalf::itanium;
 
 void showGrammar() {
-	static ItaniumDemangler demangler;
 	auto cat = itanium::ProductionType::any_mangled_name;
-	auto& rules = demangler.rules;
+	auto rules = build_grammar();
 	auto g = "<pre>" + format_grammar_recursive_html(rules, cat) + "</pre>";
 
 	auto& escaped = g;
@@ -50,8 +46,7 @@ void setDarkMode(bool value) {
 	ustate->darkMode = value;
 }
 
-void setMaxLength(int nrows, int ncols) {
-	ustate->config.length = nrows * ncols;
+void setMaxLength(int, int) {
 }
 }
 

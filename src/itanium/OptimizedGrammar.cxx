@@ -2,8 +2,6 @@
 #include "Grammar.hxx"
 #include <map>
 #include <set>
-#include <string_view>
-#include <variant>
 
 namespace swartalf::itanium {
 

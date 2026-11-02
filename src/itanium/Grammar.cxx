@@ -413,11 +413,11 @@ void add_expression_rules(ProductionGrammar& rules) {
 	rules.add_rule<expression>(unresolved_name);
 	rules.add_rule<expression>(expr_primary);
 	rules.add_rule<expression>(requires_expression);
-	rules.add_rule<requires_expression>("rq", rep(requirement_llvm), "E");
-	rules.add_rule<requires_expression>("rQ", bare_function_type, "_", rep(requirement_llvm), "E");
-	rules.add_rule<requirement_llvm>("X", expression, "R", type);
-	rules.add_rule<requirement_llvm>("X", expression);
-	rules.add_rule<requirement_llvm>("T", type);
+	rules.add_rule<requires_expression>("rq", rep(requirement), "E");
+	rules.add_rule<requires_expression>("rQ", bare_function_type, "_", rep(requirement), "E");
+	rules.add_rule<requirement>("X", expression, "R", type);
+	rules.add_rule<requirement>("X", expression);
+	rules.add_rule<requirement>("T", type);
 
 	rules.add_rule<unresolved_name>(opt("gs"), "sr", rep(unresolved_qualifier_level), "E", base_unresolved_name);
 	rules.add_rule<unresolved_name>(base_unresolved_name);

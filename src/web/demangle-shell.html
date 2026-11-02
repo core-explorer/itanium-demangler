@@ -39,6 +39,29 @@
 ">
             </div>
         </div>
+        <div>
+  
+
+            <form id="option_form">          <fieldset>
+  <legend>Options</legend>
+  <p><input type="checkbox" id="relative" name="relative" checked /><label for="relative">Relative Names</label></p>
+  <p><input type="checkbox" id="template_param" name="template_param" checked /><label for="template_param">Resolve Template Parameters</label></p>
+  <p><input type="checkbox" id="substitution" name="substitution" checked /><label for="substitution">Resolve Substitutions</label></p>
+  <p><input type="checkbox" id="expression" name="expression" checked /><label for="expression">Resolve Expressions</label></p>
+  <p><input type="checkbox" id="function_sig" name="function_sig" checked /><label for="function_sig">Resolve Function Signatures</label></p>
+  <p><input type="checkbox" id="detail" name="detail" checked /><label for="detail">Hide Technical Details</label></p>
+            
+<p><select name="dialect" id="dialect">
+  <option value="LLVM">LLVM</option>
+  <option value="GNU">GNU</option>
+</select><label for="dialect">Demangling Dialect</label></p>
+<p><select name="return_type" id="return_type">
+  <option value="leading">leading</option>
+    <option value="trailing">trailing</option>
+  <option value="hide">hide</option>
+</select><label for="return_type">Return Type</label></p>
+</fieldset></form>
+        </div>
 
         <script>
             var is_emscripten_initialized = 0;
@@ -71,6 +94,7 @@
                 window.addEventListener('load', function() {
                     let mangling_form = document.getElementById('mangling_form');
                     mangling_form.reset();
+                    document.getElementById('option_form').reset();
                     document.getElementById('demangled').value = '';
 
                 });
@@ -125,51 +149,115 @@
             function demangle() {
                 demangle_text(document.getElementById('mangled').value);
             }
-            document.getElementById('mangled').addEventListener("input", demangle);
-
-            const measurer = document.createElement('span');
-            measurer.style.cssText = 'visibility: hidden; position: absolute;';
-            measurer.textContent = '0';
-            document.body.appendChild(measurer);
-            function getCharDimensions(element) {
-                const computed = window.getComputedStyle(element);
-                measurer.style.font = computed.font;
-                const charWidth = measurer.getBoundingClientRect().width;
-
-                let lineHeight = parseFloat(computed.lineHeight);
-                if (isNaN(lineHeight)) {
-                    lineHeight = parseFloat(computed.fontSize) * 1.2;
+            function set_dialect() {
+                let value = document.getElementById('dialect').value;
+                if (value == "GNU") {
+                    Module.setCompilerDialect(1);
                 }
-
-                return { charWidth, lineHeight };
+                if (value == "LLVM") {
+                    Module.setCompilerDialect(2);
+                }
+                demangle();
             }
+            function set_hide_details() {
+                let value = document.getElementById('detail').checked;
+                Module.setHideDetails(value);
+                demangle();
+            }
+            function set_relative_names() {
+                let value = document.getElementById('relative').checked;
+                Module.setRelativeNames(value);
+                demangle();
+            }
+            function set_return_style() {
+                let value = document.getElementById('return_type').value;
+                if (value == "hide"){Module.setHideReturn(1);}
+                if (value == "trailing"){Module.setHideReturn(0);Module.setTrailingReturn(1);}
+                if (value == "leading"){Module.setHideReturn(0);Module.setTrailingReturn(0);}
+                demangle();
+            }
+            function set_resolve_templates() {
+                let value = document.getElementById('template_param').checked;
+                Module.setResolveTemplates(value);
+                demangle();
+            }
+            function set_resolve_substitutions() {
+                let value = document.getElementById('substitution').checked;
+                Module.setResolveSubstitutions(value);
+                demangle();
+            }
+            function set_resolve_expressions() {
+                let value = document.getElementById('expression').checked;
+                Module.setResolveExpressions(value);
+                demangle();
+            }
+            document.getElementById('mangled').addEventListener("input", demangle);
+            document.getElementById('dialect').addEventListener("input", set_dialect);
+            document.getElementById('detail').addEventListener("input", set_hide_details);
+            document.getElementById('return_type').addEventListener("input", set_return_style);
+            document.getElementById('template_param').addEventListener("input", set_resolve_templates);
+            document.getElementById('substitution').addEventListener("input", set_resolve_substitutions);
+            document.getElementById('expression').addEventListener("input", set_resolve_expressions);
+            document.getElementById('relative').addEventListener("input", set_relative_names);
 
-            const observer = new ResizeObserver(entries => {
-                for (let entry of entries) {
-                    const wrapperWidth = entry.contentRect.width;
-                    const wrapperHeight = entry.contentRect.height;
-                    const computed = window.getComputedStyle(textarea);
+    const container = document.getElementById('demangled');
+    
 
-                    const paddingX = parseFloat(computed.paddingLeft) + parseFloat(computed.paddingRight);
-                    const paddingY = parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
+    function calculateAndFillGrid() {
+      // 1. Measure a single character's dimensions dynamically
+      const measureSpan = document.createElement('span');
+      const computed = window.getComputedStyle(container);
+      
+      measureSpan.style.fontFamily = computed.fontFamily;
+      measureSpan.style.fontSize = computed.fontSize;
+      measureSpan.style.lineHeight = computed.lineHeight;
+      measureSpan.style.visibility = 'hidden';
+      measureSpan.style.position = 'absolute';
+      measureSpan.style.whiteSpace = 'pre';
+      measureSpan.innerHTML = '<pre>#</pre>';
+      
+      document.body.appendChild(measureSpan);
+      const charWidth = measureSpan.getBoundingClientRect().width;
+      const charHeight = measureSpan.getBoundingClientRect().height;
+      document.body.removeChild(measureSpan);
 
-                    const contentWidth = wrapperWidth - paddingX;
-                    const contentHeight = wrapperHeight - paddingY;
+      // 2. Account for container padding
+      const paddingX = parseFloat(computed.paddingLeft) + parseFloat(computed.paddingRight);
+      const paddingY = parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
 
-                    const {charWidth,lineHeight} = getCharDimensions(textarea);
+      const availableWidth = container.clientWidth - paddingX;
+      const availableHeight = container.clientHeight - paddingY;
 
-                    const cols = Math.floor(contentWidth / charWidth);
-                    const rows = Math.floor(contentHeight / lineHeight);
+      // 3. Compute maximum rows and columns that fit without overflowing
+      const columns = Math.floor(availableWidth / charWidth);
+      const rows = Math.floor(availableHeight / charHeight);
 
-                    if (is_emscripten_initialized == 1) {
-                        Module.setMaxLength(cols, rows);
-                        demangle_text(document.getElementById('mangled').value);
+      if (columns <= 0 || rows <= 0) {
+        container.textContent = '';
+        return;
+      }
+      
+ if (is_emscripten_initialized == 1) {
+                       Module.setMaxLength(columns, rows);
+                        demangle_text(document.getElementById('mangled').value); 
+                        
                     }
-                }
-            });
 
-            observer.observe(textarea);
-        </script>
+
+    }
+
+    // Use ResizeObserver to automatically adjust when user resizes the div
+    const resizeObserver = new ResizeObserver(() => {
+      calculateAndFillGrid();
+    });
+
+    resizeObserver.observe(container);
+
+    // Initial render
+    calculateAndFillGrid();
+  </script>
+
+
         {{{ SCRIPT }}}
 
 </body>

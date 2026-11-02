@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
-namespace swartalf {
+#include <string_view>
+namespace swartalf::itanium {
 
 enum class ConstOrientation : uint8_t {
 	none,
@@ -39,6 +40,17 @@ enum class CompilerDialect : uint8_t {
 	gcc,
 	clang
 };
+
+constexpr std::string_view to_string_view(CompilerDialect d) {
+	switch (d) {
+	case CompilerDialect::clang:
+		return "clang";
+	case CompilerDialect::gcc:
+		return "gcc";
+	default:
+		return "unknown";
+	}
+}
 
 enum class ImitationTarget : uint8_t {
 	none,

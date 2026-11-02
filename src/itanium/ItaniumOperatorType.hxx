@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string_view>
-namespace swartalf {
+namespace swartalf::itanium {
 
 enum class ItaniumOperatorType : uint8_t {
 	none,
@@ -9,14 +9,14 @@ enum class ItaniumOperatorType : uint8_t {
 	na, //!< new[]
 	dl, //!< delete
 	da, //!< delete[]
-	ps, //!< + (unary)
-	ng, //!< - (unary)
+	ps, //!< \+ (unary)
+	ng, //!< \- (unary)
 	ad, //!< & (unary)
-	de, //!< * (unary)
+	de, //!< <span>*</span> (unary)
 	co, //!< ~
-	pl, //!< +
-	mi, //!< -
-	ml, //!< *
+	pl, //!< \+
+	mi, //!< \-
+	ml, //!< <span>*</span>
 	dv, //!< /
 	rm, //!< %
 	an, //!< &
@@ -32,13 +32,13 @@ enum class ItaniumOperatorType : uint8_t {
 	oR, //!< |=
 	eO, //!< ^=
 	ls, //!< <<
-	rs, //!< >>
+	rs, //!< \>>
 	lS, //!< <<=
-	rS, //!< >>=
+	rS, //!< \>>=
 	eq, //!< ==
 	ne, //!< !=
 	lt, //!< <
-	gt, //!< >
+	gt, //!< \>
 	le, //!< <=
 	ge, //!< >=
 	ss, //!< <=>
@@ -46,7 +46,7 @@ enum class ItaniumOperatorType : uint8_t {
 	aa, //!< &&
 	oo, //!< ||
 	pp, //!< ++ (postfix in <expression> context)
-	mm, //!< -- (postfix in <expression> context)
+	mm, //!< \-- (postfix in <expression> context)
 	cm, //!< ,
 	pm, //!< ->*
 	pt, //!< ->

@@ -1,17 +1,16 @@
 #pragma once
 #include "DemanglingDialect.hxx"
-#include "Grammar.hxx"
+#include "ProductionType.hxx"
 #include <expected>
 #include <string>
-#include <string_view>
 #include <vector>
-namespace swartalf {
+namespace swartalf::itanium {
 
 struct AnalysisError {
 	std::string message;
 	std::string_view path;
 	std::string_view severity;
-	static inline constexpr std::string_view severity_error = "error";
+	static constexpr std::string_view severity_error = "error";
 
 	AnalysisError(std::string_view msg, std::string_view p, std::string_view sev = severity_error) :
 	    message(), path(p), severity(sev) { (void)msg; }
@@ -34,13 +33,16 @@ struct FiltAnalyzerConfig {
 	unsigned length = 100000;
 	unsigned function_params = 100;
 	unsigned template_params = 100;
+	bool relative = false;
 #ifdef __clang__
 	CompilerDialect dialect = CompilerDialect::clang;
 #else
 	CompilerDialect dialect = CompilerDialect::gcc;
 #endif
 
-	itanium::ProductionType category = itanium::ProductionType::any_mangled_name;
+	ProductionType category = ProductionType::any_mangled_name;
+
+	DemanglingDialect make_dialect() const;
 };
 
 struct FiltAnalyzer {

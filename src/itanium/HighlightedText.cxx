@@ -2,41 +2,31 @@
 
 namespace swartalf::itanium {
 
-HighlightedText HighlightDecorator::decorate(Decoration deco, const HighlightedText& tn, unsigned level) {
-	HighlightedText result;
-	result.sg.reserve(tn.sg.size());
-	for (const auto& t : tn.sg) {
-		result += decorate(deco, t, level);
-	}
-	return result;
-}
-
-HighlightedTextSegment HighlightDecorator::decorate(Decoration deco, std::string_view tn, unsigned level) {
-	HighlightedTextSegment t;
-	t.text += tn;
-	return decorate(deco, t, level);
-}
-
-HighlightedTextSegment HighlightDecorator::decorate(Decoration deco, const std::string& tn, unsigned level) {
-	HighlightedTextSegment t;
-	t.text += tn;
-	return decorate(deco, t, level);
-}
-
-Color256Cmy blend(const Color256Cmy& x, const Color256Cmy& z) {
-	auto xp = ColorFloat(Color256(x));
-	auto zp = ColorFloat(Color256(z));
+Color256 mblend(const Color256& x, const Color256& z) {
+	auto xp = ColorFloat(x);
+	auto zp = ColorFloat(z);
 	auto wp = xp * zp;
-	auto w = Color256Cmy(Color256(wp));
+	auto w = Color256(wp);
 	return w;
 }
 
-Highlight blend(const Highlight& hi, const Highlight& ho) {
-	Highlight res;
+float gblend(float hi, float ho) {
+	return sqrtf(hi * ho);
+}
 
-	res.fg = blend(hi.fg, ho.fg);
-	res.bg = blend(hi.bg, ho.bg);
-	res.ud = blend(hi.ud, ho.ud);
+AbstractColor blend(const AbstractColor& hi, const AbstractColor& ho) {
+	AbstractColor res;
+	res.flags = hi.flags | ho.flags;
+	res.even_fp = gblend(hi.even_fp, ho.even_fp);
+	res.odd_fp = gblend(hi.odd_fp, ho.odd_fp);
+	res.even_tp = gblend(hi.even_tp, ho.even_tp);
+	res.odd_tp = gblend(hi.odd_tp, ho.odd_tp);
+	return res;
+}
+
+HighlightLight blend(const HighlightLight& hi, const HighlightLight& ho) {
+	HighlightLight res;
+
 	res.ul = UnderlineStyle(std::max(unsigned(hi.ul), unsigned(ho.ul)));
 
 	res.bold = hi.bold or ho.bold;
@@ -44,63 +34,83 @@ Highlight blend(const Highlight& hi, const Highlight& ho) {
 	res.alpha = hi.alpha * ho.alpha;
 	res.link = hi.link;
 	res.tags = hi.tags | ho.tags;
+
+	res.ac = blend(hi.ac, ho.ac);
 	return res;
 }
 
-HighlightedTextSegment HighlightDecorator::decorate(Decoration deco, const HighlightedTextSegment& ts, unsigned level) {
+HighlightDark blend(const HighlightDark& hi, const HighlightDark& ho) {
+	HighlightDark res;
+
+	res.fg = mblend(hi.fg, ho.fg);
+	res.bg = mblend(hi.bg, ho.bg);
+	res.ud = mblend(hi.ud, ho.ud);
+	res.ul = UnderlineStyle(std::max(unsigned(hi.ul), unsigned(ho.ul)));
+
+	res.bold = hi.bold or ho.bold;
+	res.italic = hi.italic or ho.italic;
+	res.alpha = hi.alpha * ho.alpha;
+	res.link = hi.link;
+	res.tags = hi.tags | ho.tags;
+
+	return res;
+}
+
+template <>
+HighlightedTextSegment<HighlightDark> HighlightDecorator<HighlightDark>::decorate(Decoration deco, const HighlightedTextSegment<HighlightDark>& ts, unsigned level) {
 	(void)level;
 
 	const auto& [tn, ihl] = ts;
-	Highlight hl;
+	HighlightDark hl;
 
 	if (deco == Decoration::function_name) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.1f, 0.1f, 0.5f));
+		hl.fg = Color256(ColorFloat::cmy(0.1f, 0.1f, 0.5f));
 	}
 	if (deco == Decoration::pointer) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.2f, 0.1f, 0.2f));
+		hl.fg = Color256(ColorFloat::cmy(0.2f, 0.1f, 0.2f));
 		hl.bold = true;
 	}
 	if (deco == Decoration::reference) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.2f, 0.1f, 0.2f));
+		hl.fg = Color256(ColorFloat::cmy(0.2f, 0.1f, 0.2f));
 	}
 	if (deco == Decoration::noise) {
 		hl.alpha = 1.0f - 0.25f;
 	}
 	if (deco == Decoration::rvalue_reference) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.1f, 0.3f, 0.1f));
+		hl.fg = Color256(ColorFloat::cmy(0.1f, 0.3f, 0.1f));
 	}
 	if (deco == Decoration::template_brackets) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.5f, 0.1f, 0.1f));
+		hl.fg = Color256(ColorFloat::cmy(0.5f, 0.1f, 0.1f));
 	}
 	if (deco == Decoration::array_brackets) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.25f, 0.1f, 0.25f));
+		hl.fg = Color256(ColorFloat::cmy(0.25f, 0.1f, 0.25f));
 	}
 	if (deco == Decoration::keyword) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.1f, 0.1f, 0.1f));
+		hl.fg = Color256(ColorFloat::cmy(0.1f, 0.1f, 0.1f));
 	}
 	if (deco == Decoration::type_keyword) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.1f, 0.2f, 0.2f));
+		hl.fg = Color256(ColorFloat::cmy(0.1f, 0.2f, 0.2f));
 	}
 	if (deco == Decoration::operator_symbol) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.1f, 0.2f, 0.1f));
+		hl.fg = Color256(ColorFloat::cmy(0.1f, 0.2f, 0.1f));
 	}
 	if (deco == Decoration::const_keyword) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.2f, 0.2f, 0.2f));
+		hl.fg = Color256(ColorFloat::cmy(0.2f, 0.2f, 0.2f));
 	}
 	if (deco == Decoration::call_parameter_even) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.2f, 0.0f, 0.0f));
+		hl.fg = Color256(ColorFloat::cmy(0.2f, 0.0f, 0.0f));
 	}
 	if (deco == Decoration::call_parameter_odd) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.0f, 0.2f, 0.0f));
+		hl.fg = Color256(ColorFloat::cmy(0.0f, 0.2f, 0.0f));
 	}
 	if (deco == Decoration::template_parameter_even) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.1f, 0.0f, 0.1f));
+		hl.fg = Color256(ColorFloat::cmy(0.1f, 0.0f, 0.1f));
 	}
 	if (deco == Decoration::template_parameter_odd) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.0f, 0.1f, 0.1f));
+		hl.fg = Color256(ColorFloat::cmy(0.0f, 0.1f, 0.1f));
 	}
 	if (deco == Decoration::call_parentheses) {
-		hl.fg = Color256Cmy(ColorFloatCmy(0.5f, 0.1f, 0.1f));
+		hl.fg = Color256(ColorFloat::cmy(0.5f, 0.1f, 0.1f));
 		hl.bold = true;
 	}
 	if (deco == Decoration::generic_bold) {
@@ -114,89 +124,66 @@ HighlightedTextSegment HighlightDecorator::decorate(Decoration deco, const Highl
 	return HighlightedTextSegment(tn, ohl);
 }
 
-float gammodrify(float f) {
-	if (f < 0.5f) {
-		float x = sqrtf(2.0f * f);
-		return 0.5f * x;
+template <>
+HighlightedTextSegment<HighlightLight> HighlightDecorator<HighlightLight>::decorate(Decoration deco, const HighlightedTextSegment<HighlightLight>& ts, unsigned level) {
+	(void)level;
+
+	const auto& [tn, ihl] = ts;
+	HighlightLight hl;
+
+	hl.ac.flags.insert(deco);
+
+	if (deco == Decoration::pointer) {
+		hl.bold = true;
 	}
-	float x = 2.0f * f - 1.0f;
-	return 0.5f * x * x + 0.5f;
+	if (deco == Decoration::noise) {
+		hl.alpha = 1.0f - 0.25f;
+	}
+
+	if (deco == Decoration::call_parameter_even) {
+		hl.ac.even_fp *= 0.8f;
+	}
+	if (deco == Decoration::call_parameter_odd) {
+		hl.ac.odd_fp *= 0.8f;
+	}
+	if (deco == Decoration::template_parameter_even) {
+		hl.ac.even_tp *= 0.8f;
+	}
+	if (deco == Decoration::template_parameter_odd) {
+		hl.ac.odd_tp *= 0.8f;
+	}
+	if (deco == Decoration::call_parentheses) {
+		hl.bold = true;
+	}
+	if (deco == Decoration::generic_bold) {
+		hl.bold = true;
+	}
+	if (deco == Decoration::generic_italic) {
+		hl.italic = true;
+	}
+
+	auto ohl = blend(ihl, hl);
+	return HighlightedTextSegment(tn, ohl);
 }
 
-ColorFloat gammodrify(ColorFloat f) {
-	ColorFloat z;
-	z.r = gammodrify(f.r);
-	z.g = gammodrify(f.g);
-	z.b = gammodrify(f.b);
-	return z;
+Color256 ablend(Color256 a, Color256 b) {
+	Color256 c;
+	c.r = (a.r + b.r) / 2;
+	c.g = (a.g + b.g) / 2;
+	c.b = (a.b + b.b) / 2;
+	return c;
 }
 
-enum class ColorTransform : uint8_t {
-	rgb,
-	rbg,
-	brg,
-	bgr,
-	grb,
-	gbr,
-	cmy,
-	cym,
-	mcy,
-	myc,
-	ycm,
-	ymc,
-
-};
-
-ColorFloat transform(ColorFloat x, ColorTransform mode) {
-	float r = x.r;
-	float g = x.g;
-	float b = x.b;
-	float c = 0.5f * (b + g);
-	float m = 0.5f * (r + b);
-	float y = 0.5f * (r + g);
-	/*
-	012
-	021
-	102
-	120
-	201
-	210
-	*/
-	using enum ColorTransform;
-	switch (mode) {
-	case rgb:
-		return {r, g, b};
-	case rbg:
-		return {r, b, g};
-	case brg:
-		return {b, r, g};
-	case bgr:
-		return {b, g, r};
-	case grb:
-		return {g, r, b};
-	case gbr:
-		return {g, b, r};
-
-	case cmy:
-		return {c, m, y};
-	case cym:
-		return {c, y, m};
-	case mcy:
-		return {m, c, y};
-	case myc:
-		return {m, y, c};
-	case ycm:
-		return {y, c, m};
-	case ymc:
-		return {y, m, c};
-	default: {
-		float gray = 0.299f * r + 0.587f * g + 0.114f * b;
-		return {gray, gray, gray};
-	}
-	}
+Color256 wblend(float f, Color256 a, Color256 b) {
+	Color256 c;
+	float g = 1.0f - f;
+	c.r = f * a.r + g * b.r;
+	c.g = f * a.g + g * b.g;
+	c.b = f * a.b + g * b.b;
+	return c;
 }
 
-std::string render_cli(const HighlightedTextSegment& ht, bool light_mode) {
+std::string render_cli(const HighlightedTextSegment<HighlightDark>& ht) {
 	//assume white fg, black bg
 	const auto& [text, hl] = ht;
 	std::string result;
@@ -207,26 +194,15 @@ std::string render_cli(const HighlightedTextSegment& ht, bool light_mode) {
 	if (hl.italic) {
 		result += "\033[3m";
 	}
-	if (light_mode) {
-		float a = 1.0f - hl.alpha;
-		auto fg = Color256(ColorFloat(a, a, a));
-		auto bg = Color256(hl.fg);
-		result += fmt::format("\033[38;2;{};{};{}m", fg.r, fg.g, fg.b);
 
-		result += fmt::format("\033[48;2;{};{};{}m", bg.r, bg.g, bg.b);
-	} else {
-		auto f = ColorFloat(Color256(hl.fg));
-		f *= hl.alpha;
-		auto fg = Color256(f);
-		result += fmt::format("\033[38;2;{};{};{}m", fg.r, fg.g, fg.b);
-	}
+	auto f = ColorFloat(Color256(hl.fg));
+	f *= hl.alpha;
+	auto fg = Color256(f);
+	result += fmt::format("\033[38;2;{};{};{}m", fg.r, fg.g, fg.b);
+
 	result += text;
-	if (light_mode) {
-		result += "\033[39;49m";
 
-	} else {
-		result += "\033[39m";
-	}
+	result += "\033[39m";
 
 	if (hl.italic) {
 		result += "\033[23m";
@@ -238,7 +214,86 @@ std::string render_cli(const HighlightedTextSegment& ht, bool light_mode) {
 	return result;
 }
 
-std::string render_html(const HighlightedTextSegment& ht, bool light_mode) {
+std::string render_cli(const HighlightedTextSegment<HighlightLight>& ht) {
+	const auto& [text, hl] = ht;
+	std::string result;
+
+	if (hl.bold) {
+		result += "\033[1m";
+	}
+	if (hl.italic) {
+		result += "\033[3m";
+	}
+
+	auto fg = "#0A2540"_rgb;
+
+	if (ht.hl.ac.flags.contains(Decoration::template_brackets)) {
+		fg = "#0A4580"_rgb;
+	}
+
+	if (ht.hl.ac.flags.contains(Decoration::call_parentheses)) {
+		fg = "#800A45"_rgb;
+	}
+
+	if (ht.hl.ac.flags.contains(Decoration::noise)) {
+		fg = "#606060"_rgb;
+	}
+	if (ht.hl.ac.even_fp < 1.0f) {
+		auto even_fc = "#806020"_rgb;
+		float w = ht.hl.ac.even_fp * 0.5f;
+		w = 0.125f;
+		(void)w;
+		fg = wblend(w, fg, even_fc);
+	}
+
+	if (ht.hl.ac.odd_fp < 1.0f) {
+		auto odd_fc = "#408090"_rgb;
+		float w = ht.hl.ac.odd_fp * 0.5f;
+		(void)w;
+		w = 0.125f;
+		fg = wblend(w, fg, odd_fc);
+	}
+
+	if (ht.hl.ac.even_tp < 1.0f) {
+		auto even_tc = "#206020"_rgb;
+		float w = ht.hl.ac.odd_tp * 0.5f;
+		w = 0.125f;
+		(void)w;
+		fg = wblend(w, fg, even_tc);
+	}
+
+	if (ht.hl.ac.odd_tp < 1.0f) {
+		auto odd_tc = "#206090"_rgb;
+		float w = ht.hl.ac.odd_tp * 0.5f;
+		(void)w;
+		w = 0.125f;
+		fg = wblend(w, fg, odd_tc);
+	}
+
+	if (ht.hl.ac.flags.contains(Decoration::function_name)) {
+		auto bg = "#FFFFDF"_rgb;
+
+		result += fmt::format("\033[48;2;{};{};{}m", bg.r, bg.g, bg.b);
+	}
+
+	result += fmt::format("\033[38;2;{};{};{}m", fg.r, fg.g, fg.b);
+
+	result += text;
+
+	result += "\033[39;49m";
+
+	if (hl.italic) {
+		result += "\033[23m";
+	}
+	if (hl.bold) {
+		result += "\033[22m";
+	}
+
+	return result;
+}
+
+std::string render_html(const HighlightedTextSegment<HighlightDark>& ht) {
+	constexpr bool light_mode = false;
 	const auto& [text, hl] = ht;
 	std::string style = "style=\"";
 
@@ -249,11 +304,12 @@ std::string render_html(const HighlightedTextSegment& ht, bool light_mode) {
 		style += "font-style: italic;";
 	}
 
-	if (light_mode) {
+	if constexpr (light_mode) {
 		float a = 1.0f - hl.alpha;
 		auto fg = Color256(ColorFloat(a, a, a));
-		auto bg = Color256(hl.fg);
 		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
+		auto bg = "#808080"_rgb;
+
 		style += fmt::format("background-color: rgb({},{},{});", bg.r, bg.g, bg.b);
 	} else {
 		auto f = ColorFloat(Color256(hl.fg));
@@ -271,7 +327,7 @@ std::string render_html(const HighlightedTextSegment& ht, bool light_mode) {
 	return fmt::format("<span {}>{}</span>", style, escape_xml(text));
 }
 
-std::string render_html(const HighlightedTextSegment& ht, bool light_mode, const Navigation& nav) {
+std::string render_html(const HighlightedTextSegment<HighlightLight>& ht) {
 	const auto& [text, hl] = ht;
 	std::string style = "style=\"";
 
@@ -282,10 +338,85 @@ std::string render_html(const HighlightedTextSegment& ht, bool light_mode, const
 		style += "font-style: italic;";
 	}
 
-	if (light_mode) {
+	auto fg = "#0A2540"_rgb;
+
+	if (ht.hl.ac.flags.contains(Decoration::template_brackets)) {
+		fg = "#0A4580"_rgb;
+	}
+
+	if (ht.hl.ac.flags.contains(Decoration::call_parentheses)) {
+		fg = "#800A45"_rgb;
+	}
+
+	if (ht.hl.ac.flags.contains(Decoration::noise)) {
+		fg = "#606060"_rgb;
+	}
+	if (ht.hl.ac.even_fp < 1.0f) {
+		auto even_fc = "#806020"_rgb;
+		float w = ht.hl.ac.even_fp * 0.5f;
+		w = 0.125f;
+		(void)w;
+		fg = wblend(w, fg, even_fc);
+	}
+
+	if (ht.hl.ac.odd_fp < 1.0f) {
+		auto odd_fc = "#408090"_rgb;
+		float w = ht.hl.ac.odd_fp * 0.5f;
+		(void)w;
+		w = 0.125f;
+		fg = wblend(w, fg, odd_fc);
+	}
+
+	if (ht.hl.ac.even_tp < 1.0f) {
+		auto even_tc = "#206020"_rgb;
+		float w = ht.hl.ac.odd_tp * 0.5f;
+		w = 0.125f;
+		(void)w;
+		fg = wblend(w, fg, even_tc);
+	}
+
+	if (ht.hl.ac.odd_tp < 1.0f) {
+		auto odd_tc = "#206090"_rgb;
+		float w = ht.hl.ac.odd_tp * 0.5f;
+		(void)w;
+		w = 0.125f;
+		fg = wblend(w, fg, odd_tc);
+	}
+
+	if (ht.hl.ac.flags.contains(Decoration::function_name)) {
+		auto bg = "#FFFFDF"_rgb;
+
+		style += fmt::format("background-color: rgb({},{},{});", bg.r, bg.g, bg.b);
+	}
+
+	style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
+
+	style += "\"";
+
+	if (hl.tags.contains(HighlightTags::odr)) {
+		return fmt::format("<span {}>{}</span>", style, escape_xml(text) + "[ODR]");
+	}
+
+	return fmt::format("<span {}>{}</span>", style, escape_xml(text));
+}
+
+template <typename HighlightType>
+std::string render_html(const HighlightedTextSegment<HighlightType>& ht, const Navigation& nav) {
+	constexpr bool light_mode = std::is_same_v<HighlightType, HighlightLight>;
+	const auto& [text, hl] = ht;
+	std::string style = "style=\"";
+
+	if (hl.bold) {
+		style += "font-weight: bold;";
+	}
+	if (hl.italic) {
+		style += "font-style: italic;";
+	}
+
+	if constexpr (light_mode) {
 		float a = 1.0f - hl.alpha;
 		auto fg = Color256(ColorFloat(a, a, a));
-		auto bg = Color256(hl.fg);
+		auto bg = "#808080"_rgb;
 		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
 		style += fmt::format("background-color: rgb({},{},{});", bg.r, bg.g, bg.b);
 	} else {
@@ -307,89 +438,7 @@ std::string render_html(const HighlightedTextSegment& ht, bool light_mode, const
 	return disp;
 }
 
-std::string render_cli_light(const HighlightedTextSegment& ht) {
-	return render_cli(ht, true);
-}
-std::string render_cli_dark(const HighlightedTextSegment& ht) {
-	return render_cli(ht, false);
-}
+template std::string render_html(const HighlightedTextSegment<HighlightLight>& ht, const Navigation& nav);
+template std::string render_html(const HighlightedTextSegment<HighlightDark>& ht, const Navigation& nav);
 
-std::string render_cli(const HighlightedText& ht, bool light_mode) {
-	std::string result;
-	for (const auto& t : ht.sg) {
-		result += render_cli(t, light_mode);
-	}
-	return result;
-}
-
-std::string render_html_light(const HighlightedTextSegment& ht) {
-	return render_html(ht, true);
-}
-std::string render_html_dark(const HighlightedTextSegment& ht) {
-	return render_html(ht, false);
-}
-
-std::string render_html(const HighlightedText& ht, bool light_mode) {
-	std::string result;
-	for (const auto& t : ht.sg) {
-		result += render_html(t, light_mode);
-	}
-	return result;
-}
-std::string render_html(const HighlightedText& ht, bool light_mode, const Navigation& nav) {
-	std::string result;
-	for (const auto& t : ht.sg) {
-		result += render_html(t, light_mode, nav);
-	}
-	return result;
-}
-CompositeStack<std::string> render_cli(const CompositeStack<HighlightedText>& ht, bool light_mode) {
-	CompositeStack<std::string> result;
-	result.head = render_cli(ht.head, light_mode);
-	result.tail = render_cli(ht.tail, light_mode);
-	return result;
-}
-
-std::string render_cli_dark(const HighlightedText& ht) {
-	std::string result;
-	for (const auto& t : ht.sg) {
-		result += render_cli_dark(t);
-	}
-	return result;
-}
-
-std::string render_cli_light(const HighlightedText& ht) {
-	std::string result;
-	for (const auto& t : ht.sg) {
-		result += render_cli_light(t);
-	}
-	return result;
-}
-CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& ht, bool light_mode) {
-	CompositeStack<std::string> result;
-	result.head = render_html(ht.head, light_mode);
-	result.tail = render_html(ht.tail, light_mode);
-	return result;
-}
-CompositeStack<std::string> render_html(const CompositeStack<HighlightedText>& ht, bool light_mode, const Navigation& nav) {
-	CompositeStack<std::string> result;
-	result.head = render_html(ht.head, light_mode, nav);
-	result.tail = render_html(ht.tail, light_mode, nav);
-	return result;
-}
-std::string render_html_dark(const HighlightedText& ht) {
-	std::string result;
-	for (const auto& t : ht.sg) {
-		result += render_html_dark(t);
-	}
-	return result;
-}
-
-std::string render_html_light(const HighlightedText& ht) {
-	std::string result;
-	for (const auto& t : ht.sg) {
-		result += render_html_light(t);
-	}
-	return result;
-}
 }

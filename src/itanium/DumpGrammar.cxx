@@ -1,7 +1,5 @@
-#include "FormatAst.hxx"
 #include "FormatDemangle.hxx"
 #include "Grammar.hxx"
-#include "OptimizedGrammar.hxx"
 #include "ParseName.hxx"
 #include "ParseResult.hxx"
 #include "../cli/cli_color.hxx"
@@ -11,7 +9,7 @@
 #include <array>
 #include <optional>
 #include <set>
-#include <string_view>
+
 namespace swartalf::itanium {
 namespace {
 std::array<std::string_view, 126> production_names = {
@@ -109,7 +107,7 @@ std::array<std::string_view, 126> production_names = {
     "template_param_decl",
     "partial_nested_name",
     "requires_expression",
-    "requirement_llvm",
+    "requirement",
     "constrained_type_llvm",
     "type_constraint_llvm",
     "pack_expression",
@@ -431,6 +429,9 @@ std::string format_grammar(const ProductionGrammar& rules, ProductionType k, con
 					SubstitutionTableView subs;
 					NestedTemplateParams tp;
 					DemanglingDialect dv;
+#if defined(__clang__)
+					dv.compiler_dialect = CompilerDialect::clang;
+#endif
 					SkipSpec skip;
 
 					std::string dema = "_ERROR";

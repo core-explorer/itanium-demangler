@@ -16,7 +16,7 @@ The command line tool exports many options to shape the demangled output, includ
 
 ```
 Options:
--r, --remangle
+--remangle
     demangle and remangle again
 -g, --grammar
     dump grammar
@@ -56,4 +56,6 @@ Options:
     compare against demangler from linked C++ runtime library
 -W, --terminal-width=arg
     limit output to integer multiple of terminal width
+-r, --relative
+    use relative names
 ```

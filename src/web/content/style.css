@@ -286,6 +286,7 @@
   }
   pre {
     font-family: "Ubuntu Sans Mono";
+    white-space: pre-wrap;
   }
   
   code {

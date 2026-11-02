@@ -28,6 +28,7 @@ enum class OptionName : uint8_t {
 	template_params,
 	function_signature,
 	terminal_width,
+	relative,
 	number_of_options
 
 };
@@ -82,6 +83,8 @@ constexpr std::string_view to_string_view(OptionName name) {
 		return "template-params";
 	case OptionName::terminal_width:
 		return "terminal-width";
+	case OptionName::relative:
+		return "relative";
 	default:
 		return "invalid-option";
 	}

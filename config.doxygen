@@ -1,0 +1,11 @@
+PROJECT_NAME           = "Itanium Demangler"
+EXTRACT_ALL            = YES
+HIDE_UNDOC_NAMESPACES  = NO
+INPUT                  = README.md src
+RECURSIVE              = YES
+SOURCE_BROWSER         = YES
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+CLANG_ASSISTED_PARSING = YES
+CLANG_OPTIONS          = -std=c++23
+GENERATE_LATEX         = NO

@@ -80,10 +80,10 @@ std::string colorize(std::string_view message, std::string_view path, std::strin
 	return oss.str();
 }
 void colored_print(FILE* stream, std::string_view message, std::string_view path, std::string_view severity) {
-	print(stream, "{}", colorize(message, path, severity));
+	fmt::print(stream, "{}", colorize(message, path, severity));
 }
 void colored_println(FILE* stream, std::string_view message, std::string_view path, std::string_view severity) {
-	println(stream, "{}", colorize(message, path, severity));
+	fmt::print(stream, "{}\n", colorize(message, path, severity));
 }
 
 std::string uncolorize(std::string_view message, std::string_view path, std::string_view severity) {
@@ -98,10 +98,10 @@ std::string uncolorize(std::string_view message, std::string_view path, std::str
 	return oss.str();
 }
 void uncolored_print(FILE* stream, std::string_view message, std::string_view path, std::string_view severity) {
-	print(stream, "{}", uncolorize(message, path, severity));
+	fmt::print(stream, "{}", uncolorize(message, path, severity));
 }
 void uncolored_println(FILE* stream, std::string_view message, std::string_view path, std::string_view severity) {
-	println(stream, "{}", uncolorize(message, path, severity));
+	fmt::print(stream, "{}\n", uncolorize(message, path, severity));
 }
 
 }

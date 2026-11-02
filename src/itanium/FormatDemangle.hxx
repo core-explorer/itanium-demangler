@@ -2,8 +2,8 @@
 
 #include "CompositeStack.hxx"
 #include "DemanglingDialect.hxx"
-#include "FormatAst.hxx"
 #include "LengthOnly.hxx"
+#include "SubstitutionTable.hxx"
 #include "../util/FlagSet.hxx"
 #include "../util/HighlightTags.hxx"
 #include <string_view>
@@ -52,11 +52,22 @@ std::expected<std::string, ParseError> format_demangled_html_light(const ParseRe
 std::expected<std::string, ParseError> format_demangled_html_dark(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit);
 
 std::expected<std::string, ParseError> format_demangled_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix);
+
 const ParseResult* resolve_template_param(const ParseResult& res, const NestedTemplateParams& tp);
 std::tuple<const ParseResult*, SubstitutionTableView, const NestedTemplateParams*> resolve_substitution(const ParseResult& res, const SubstitutionTableView& subs);
 
 ParseResult restore_substitutions(const ParseResult& r, const SubstitutionTableView& subs);
 ParseResult restore_substitutions_and_template_params(const ParseResult& r, const SubstitutionTableView& subs, const NestedTemplateParams& tp);
 std::optional<int> get_pack_size(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, RecursionLimit max_recursion);
-std::expected<std::string, ParseError> format_demangled_link_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, bool light_mode, std::string_view prefix);
+
+std::expected<std::string, ParseError> format_demangled_link_light_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix);
+std::expected<std::string, ParseError> format_demangled_link_dark_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix);
+
+inline std::expected<std::string, ParseError> format_demangled_link_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, bool light_mode, std::string_view prefix) {
+	if (light_mode) {
+		return format_demangled_link_light_html(res, subs, tp, dv, skip, max_recursion, prefix);
+	}
+	return format_demangled_link_dark_html(res, subs, tp, dv, skip, max_recursion, prefix);
+}
+
 }
