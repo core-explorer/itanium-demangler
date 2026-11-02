@@ -95,7 +95,7 @@ It is not part of the mangling whether a template argument has been defaulted, t
 This configuration data can be automatically generated from DWARF debug information, which can mark template arguments as default (but compilers don't always do that).
 Unlike inline namespaces, which can be just a list of strings, this will require describing patterns which are then matched against the intermediate AST obtained from parsing the demangled name.
 
-## Typedefs (and other aliases)##
+## Typedefs (and other aliases) ##
 
 When demangling `_Z1fSt17basic_string_viewIcSt11char_traitsIcEE`, the output is `f(std::basic_string_view<char, std::char_traits<char> >)`. The demangler is for use in a source-level debugger, we want demangled output to match the source code that generated it. Which means using common typedefs for common types. That would demangle the function as `f(std::string_view)`.
 Resolved typedefs are not part of the mangling, this information needs to come from configuration data (serializable as JSON), it will not be hard-coded.
