@@ -12,6 +12,8 @@ Highlights:
 ![comparison of demangler output](images/compare_output.png)
 ![video of variable-length demangling](https://github.com/user-attachments/assets/2ac3629a-e04d-48ad-b3f3-c61686abf632)
 
+Current and planned features are described in [features.md](src/itanium/features.md)
+
 The command line tool exports many options to shape the demangled output, including the option to preserve substitutions, which means the output size becomes linear in the input size, not exponential.
 
 ```
