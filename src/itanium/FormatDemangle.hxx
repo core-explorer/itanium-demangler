@@ -70,4 +70,11 @@ inline std::expected<std::string, ParseError> format_demangled_link_html(const P
 	return format_demangled_link_dark_html(res, subs, tp, dv, skip, max_recursion, prefix);
 }
 
+inline std::expected<std::string, ParseError> format_demangled_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, bool light_mode) {
+	if (light_mode) {
+		return format_demangled_html_light(res, subs, tp, dv, skip, max_recursion);
+	}
+	return format_demangled_html_dark(res, subs, tp, dv, skip, max_recursion);
+}
+
 }

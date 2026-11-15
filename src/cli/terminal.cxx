@@ -111,7 +111,6 @@ std::optional<std::pair<int, int>> get_cursor_position() {
 	}
 	struct termios old_state;
 
-
 	tcgetattr(terminal_fd.fd, &old_state);
 	auto new_state = old_state;
 	new_state.c_lflag &= ~(ICANON | ECHO);

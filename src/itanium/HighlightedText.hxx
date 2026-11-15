@@ -463,8 +463,9 @@ CompositeStack<std::string> render_cli(const CompositeStack<HighlightedText<High
 	return result;
 }
 
-std::string render_html(const HighlightedTextSegment<HighlightLight>& ht);
-std::string render_html(const HighlightedTextSegment<HighlightDark>& ht);
+template <typename HighlightType>
+std::string render_html(const HighlightedTextSegment<HighlightType>& ht);
+
 template <typename HighlightType>
 std::string render_html(const HighlightedTextSegment<HighlightType>& ht, const Navigation& nav);
 

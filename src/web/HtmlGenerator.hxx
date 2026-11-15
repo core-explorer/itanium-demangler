@@ -1,8 +1,5 @@
 #pragma once
 #include "../util/Stream.hxx"
-#include <cstdint>
-#include <iomanip>
-#include <sstream>
 #include <string>
 #include <vector>
 namespace swartalf {
@@ -15,7 +12,7 @@ struct InstantTag {
 	    name(n) {}
 	InstantTag operator()(const std::string& key, const std::string& value) const {
 		InstantTag copy = *this;
-		copy.attributes.push_back({key, value});
+		copy.attributes.emplace_back(key, value);
 		return copy;
 	}
 
@@ -39,11 +36,11 @@ struct HtmlTag {
 
 	HtmlTag operator()(const std::string& key, const std::string& value) const {
 		HtmlTag copy = *this;
-		copy.attributes.push_back({key, value});
+		copy.attributes.emplace_back(key, value);
 		return copy;
 	}
 	[[nodiscard]] std::string open() const {
-		std::stringstream stream;
+		Stream stream;
 		stream << "<" << name;
 		for (const auto& [key, value] : attributes) {
 			stream << " " << key << "=\"" << value << "\"";
@@ -84,7 +81,7 @@ inline ContentTag<std::string> HtmlTag::operator()(const char* content) const {
 	return ContentTag<std::string> {*this, content};
 }
 
-inline std::ostream& operator<<(std::ostream& stream, const InstantTag& tag) {
+inline Stream& operator<<(Stream& stream, const InstantTag& tag) {
 	stream << "<" << tag.name;
 	for (const auto& [key, value] : tag.attributes) {
 		stream << " " << key << "=\"" << value << "\"";
@@ -95,7 +92,7 @@ inline std::ostream& operator<<(std::ostream& stream, const InstantTag& tag) {
 
 template <typename T>
 ContentTag<T>::operator std::string() const {
-	std::ostringstream os;
+	Stream os;
 	os << *this;
 	return os.str();
 }
@@ -110,7 +107,7 @@ std::string operator+(const ContentTag<T>& lhs, const std::string& rhs) {
 	return static_cast<std::string>(lhs) + rhs;
 }
 
-inline std::ostream& operator<<(std::ostream& stream, const HtmlTag& tag) {
+inline Stream& operator<<(Stream& stream, const HtmlTag& tag) {
 	stream << "<" << tag.name;
 	for (const auto& [key, value] : tag.attributes) {
 		stream << " " << key << "=\"" << value << "\"";
@@ -120,26 +117,7 @@ inline std::ostream& operator<<(std::ostream& stream, const HtmlTag& tag) {
 }
 
 template <typename T>
-inline std::ostream& operator<<(std::ostream& stream, const ContentTag<T>& tag) {
-	stream << "<" << tag.tag.name;
-	for (const auto& [key, value] : tag.tag.attributes) {
-		stream << " " << key << "=\"" << value << "\"";
-	}
-	stream << ">" << tag.content << "</" << tag.tag.name << ">";
-	return stream;
-}
-
-inline swartalf::Stream& operator<<(swartalf::Stream& stream, const HtmlTag& tag) {
-	stream << "<" << tag.name;
-	for (const auto& [key, value] : tag.attributes) {
-		stream << " " << key << "=\"" << value << "\"";
-	}
-	stream << ">";
-	return stream;
-}
-
-template <typename T>
-inline swartalf::Stream& operator<<(swartalf::Stream& stream, const ContentTag<T>& tag) {
+inline Stream& operator<<(Stream& stream, const ContentTag<T>& tag) {
 	stream << "<" << tag.tag.name;
 	for (const auto& [key, value] : tag.tag.attributes) {
 		stream << " " << key << "=\"" << value << "\"";

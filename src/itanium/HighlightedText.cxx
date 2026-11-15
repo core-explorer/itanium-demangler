@@ -292,43 +292,17 @@ std::string render_cli(const HighlightedTextSegment<HighlightLight>& ht) {
 	return result;
 }
 
-std::string render_html(const HighlightedTextSegment<HighlightDark>& ht) {
-	constexpr bool light_mode = false;
-	const auto& [text, hl] = ht;
+std::string render_style(const HighlightDark& hl) {
 	std::string style = "style=\"";
-
-	if (hl.bold) {
-		style += "font-weight: bold;";
-	}
-	if (hl.italic) {
-		style += "font-style: italic;";
-	}
-
-	if constexpr (light_mode) {
-		float a = 1.0f - hl.alpha;
-		auto fg = Color256(ColorFloat(a, a, a));
-		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
-		auto bg = "#808080"_rgb;
-
-		style += fmt::format("background-color: rgb({},{},{});", bg.r, bg.g, bg.b);
-	} else {
-		auto f = ColorFloat(Color256(hl.fg));
-		f *= hl.alpha;
-		auto fg = Color256(f);
-		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
-	}
-
+	auto f = ColorFloat(Color256(hl.fg));
+	f *= hl.alpha;
+	auto fg = Color256(f);
+	style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
 	style += "\"";
-
-	if (hl.tags.contains(HighlightTags::odr)) {
-		return fmt::format("<span {}>{}</span>", style, escape_xml(text) + "[ODR]");
-	}
-
-	return fmt::format("<span {}>{}</span>", style, escape_xml(text));
+	return style;
 }
 
-std::string render_html(const HighlightedTextSegment<HighlightLight>& ht) {
-	const auto& [text, hl] = ht;
+std::string render_style(const HighlightLight& hl) {
 	std::string style = "style=\"";
 
 	if (hl.bold) {
@@ -340,50 +314,50 @@ std::string render_html(const HighlightedTextSegment<HighlightLight>& ht) {
 
 	auto fg = "#0A2540"_rgb;
 
-	if (ht.hl.ac.flags.contains(Decoration::template_brackets)) {
+	if (hl.ac.flags.contains(Decoration::template_brackets)) {
 		fg = "#0A4580"_rgb;
 	}
 
-	if (ht.hl.ac.flags.contains(Decoration::call_parentheses)) {
+	if (hl.ac.flags.contains(Decoration::call_parentheses)) {
 		fg = "#800A45"_rgb;
 	}
 
-	if (ht.hl.ac.flags.contains(Decoration::noise)) {
+	if (hl.ac.flags.contains(Decoration::noise)) {
 		fg = "#606060"_rgb;
 	}
-	if (ht.hl.ac.even_fp < 1.0f) {
+	if (hl.ac.even_fp < 1.0f) {
 		auto even_fc = "#806020"_rgb;
-		float w = ht.hl.ac.even_fp * 0.5f;
+		float w = hl.ac.even_fp * 0.5f;
 		w = 0.125f;
 		(void)w;
 		fg = wblend(w, fg, even_fc);
 	}
 
-	if (ht.hl.ac.odd_fp < 1.0f) {
+	if (hl.ac.odd_fp < 1.0f) {
 		auto odd_fc = "#408090"_rgb;
-		float w = ht.hl.ac.odd_fp * 0.5f;
+		float w = hl.ac.odd_fp * 0.5f;
 		(void)w;
 		w = 0.125f;
 		fg = wblend(w, fg, odd_fc);
 	}
 
-	if (ht.hl.ac.even_tp < 1.0f) {
+	if (hl.ac.even_tp < 1.0f) {
 		auto even_tc = "#206020"_rgb;
-		float w = ht.hl.ac.odd_tp * 0.5f;
+		float w = hl.ac.odd_tp * 0.5f;
 		w = 0.125f;
 		(void)w;
 		fg = wblend(w, fg, even_tc);
 	}
 
-	if (ht.hl.ac.odd_tp < 1.0f) {
+	if (hl.ac.odd_tp < 1.0f) {
 		auto odd_tc = "#206090"_rgb;
-		float w = ht.hl.ac.odd_tp * 0.5f;
+		float w = hl.ac.odd_tp * 0.5f;
 		(void)w;
 		w = 0.125f;
 		fg = wblend(w, fg, odd_tc);
 	}
 
-	if (ht.hl.ac.flags.contains(Decoration::function_name)) {
+	if (hl.ac.flags.contains(Decoration::function_name)) {
 		auto bg = "#FFFFDF"_rgb;
 
 		style += fmt::format("background-color: rgb({},{},{});", bg.r, bg.g, bg.b);
@@ -392,6 +366,13 @@ std::string render_html(const HighlightedTextSegment<HighlightLight>& ht) {
 	style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
 
 	style += "\"";
+	return style;
+}
+
+template <typename HighlightType>
+std::string render_html(const HighlightedTextSegment<HighlightType>& ht) {
+	const auto& [text, hl] = ht;
+	std::string style = render_style(hl);
 
 	if (hl.tags.contains(HighlightTags::odr)) {
 		return fmt::format("<span {}>{}</span>", style, escape_xml(text) + "[ODR]");
@@ -402,31 +383,8 @@ std::string render_html(const HighlightedTextSegment<HighlightLight>& ht) {
 
 template <typename HighlightType>
 std::string render_html(const HighlightedTextSegment<HighlightType>& ht, const Navigation& nav) {
-	constexpr bool light_mode = std::is_same_v<HighlightType, HighlightLight>;
 	const auto& [text, hl] = ht;
-	std::string style = "style=\"";
-
-	if (hl.bold) {
-		style += "font-weight: bold;";
-	}
-	if (hl.italic) {
-		style += "font-style: italic;";
-	}
-
-	if constexpr (light_mode) {
-		float a = 1.0f - hl.alpha;
-		auto fg = Color256(ColorFloat(a, a, a));
-		auto bg = "#808080"_rgb;
-		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
-		style += fmt::format("background-color: rgb({},{},{});", bg.r, bg.g, bg.b);
-	} else {
-		auto f = ColorFloat(Color256(hl.fg));
-		f *= hl.alpha;
-		auto fg = Color256(f);
-		style += fmt::format("color: rgb({},{},{});", fg.r, fg.g, fg.b);
-	}
-
-	style += "\"";
+	std::string style = render_style(hl);
 
 	auto disp = fmt::format("<span {}>{}</span>", style, escape_xml(text));
 	if (hl.tags.contains(HighlightTags::odr)) {
@@ -437,6 +395,9 @@ std::string render_html(const HighlightedTextSegment<HighlightType>& ht, const N
 	}
 	return disp;
 }
+
+template std::string render_html(const HighlightedTextSegment<HighlightLight>& ht);
+template std::string render_html(const HighlightedTextSegment<HighlightDark>& ht);
 
 template std::string render_html(const HighlightedTextSegment<HighlightLight>& ht, const Navigation& nav);
 template std::string render_html(const HighlightedTextSegment<HighlightDark>& ht, const Navigation& nav);

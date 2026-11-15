@@ -29,7 +29,6 @@ std::string block_dither256(Color256 c) {
 				auto dist = disti + distj + 2 * distb;
 
 				if (dist < best_dist) {
-
 					best_i = i;
 					best_j = j;
 					best_k = k;

@@ -47,7 +47,7 @@ constexpr uint8_t hexval(char c) {
 constexpr Color256 operator""_rgb(const char* xstr, std::size_t) {
 	Color256 value;
 	auto str = xstr + 1;
-	
+
 	value.r = hexval(str[0]) * 16 + hexval(str[1]);
 	value.g = hexval(str[2]) * 16 + hexval(str[3]);
 	value.b = hexval(str[4]) * 16 + hexval(str[5]);
@@ -58,17 +58,17 @@ constexpr Color256 operator""_rgb(const char* xstr, std::size_t) {
 constexpr std::array<Color256, 16> make_color16(uint8_t val) {
 	std::array<Color256, 16> c;
 	c[0] = {"#000000"_rgb};
-	c[1].r = val; 
-	c[2].g = val; 
+	c[1].r = val;
+	c[2].g = val;
 	c[3].r = val;
-	c[3].g = val; 
-	c[4].b = val; 
+	c[3].g = val;
+	c[4].b = val;
 	c[5].r = val;
 	c[5].b = val;
 	c[6].g = val;
 	c[6].b = val;
 	c[7] = {"#c0c0c0"_rgb};
-	
+
 	c[8] = {"#808080"_rgb};
 	c[9] = {"#ff0000"_rgb};
 	c[10] = {"#00ff00"_rgb};
@@ -329,21 +329,19 @@ constexpr std::array<Color256, 256> make_color256(uint8_t val = 0xCD) {
 	return c;
 }
 
-
 inline unsigned bestMatchl1(Color256 c, std::span<const Color256> lut) {
 	unsigned best = 0;
 
 	unsigned best_dist = distl1(c, lut[0]);
 
 	for (unsigned i = 0; i < lut.size(); i++) {
-		
 		unsigned dist = distl1(c, lut[i]);
 		if (dist < best_dist) {
 			best = i;
 			best_dist = dist;
 		}
 	}
-	
+
 	return best;
 }
 

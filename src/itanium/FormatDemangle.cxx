@@ -2115,6 +2115,35 @@ struct FormatDemangle<unscoped_name> {
 	}
 };
 
+ParseResult extract_typename_from_nested_ctor_or_dtor(const ParseResult& res, const ParseResult* tgt) {
+	std::vector<ParseResult> comps;
+	for (const auto& c : res.comps) {
+		if (const auto* p = std::get_if<ParseResult>(&c); p) {
+			if (p->type == ctor_dtor_name and p == tgt) {
+				break;
+			} else if (p->type == unqualified_name and p->comps.size() == 1 and std::get_if<ParseResult>(p->comps.data()) == tgt) {
+				break;
+			} else {
+				comps.emplace_back(*p);
+			}
+		}
+	}
+
+	if (comps.size() == 1) {
+		return comps[0];
+	}
+	ParseResult result;
+	result.type = nested_name;
+	result.comps.reserve(comps.size() + 2);
+	result.comps.emplace_back("N");
+	for (auto& c : comps) {
+		result.comps.emplace_back(std::move(c));
+	}
+	result.comps.emplace_back("E");
+
+	return result;
+}
+
 template <>
 struct FormatDemangle<nested_name> {
 	template <typename Formatter>
@@ -2191,7 +2220,22 @@ struct FormatDemangle<nested_name> {
 								if (not tmp1) {
 									return std::unexpected(tmp1.error());
 								}
-								result += formatter.decorate(Decoration::generic_bold, *tmp1);
+
+								auto tmp2 = formatter.decorate(Decoration::generic_bold, *tmp1);
+								if (not skip.tags.empty()) {
+									auto tn = extract_typename_from_nested_ctor_or_dtor(res, pp);
+									auto bare_res = restore_substitutions_and_template_params(tn, subs, tp);
+
+									auto man = format_mangled(bare_res);
+									auto itags = skip.tags.find(man);
+
+									if (itags != skip.tags.end()) {
+										for (auto t : itags->second) {
+											formatter.tag(tmp2, t);
+										}
+									}
+								}
+								result += tmp2;
 							}
 
 							was_ctor_dtor = true;
@@ -2203,7 +2247,22 @@ struct FormatDemangle<nested_name> {
 							if (not tmp1) {
 								return std::unexpected(tmp1.error());
 							}
-							result += formatter.decorate(Decoration::generic_bold, "~" + *tmp1);
+							auto tmp2 = formatter.decorate(Decoration::generic_bold, *tmp1);
+							if (not skip.tags.empty()) {
+								auto tn = extract_typename_from_nested_ctor_or_dtor(res, pp);
+								auto bare_res = restore_substitutions_and_template_params(tn, subs, tp);
+
+								auto man = format_mangled(bare_res);
+								auto itags = skip.tags.find(man);
+
+								if (itags != skip.tags.end()) {
+									for (auto t : itags->second) {
+										formatter.tag(tmp2, t);
+									}
+								}
+							}
+
+							result += formatter.decorate(Decoration::generic_bold, "~") + tmp2;
 							was_ctor_dtor = true;
 						}
 					}
@@ -2280,6 +2339,18 @@ struct FormatDemangle<nested_name> {
 						if ((i + 1 == v.size() and p->type != template_args)
 						    or ((i + 2 == v.size()) and v.back()->type == template_args)) {
 							tmp = formatter.link_to(res, tmp, subs, tp);
+
+							if (not skip.tags.empty()) {
+								auto bare_res = restore_substitutions_and_template_params(res, subs, tp);
+								auto man = format_mangled(bare_res);
+								auto itags = skip.tags.find(man);
+
+								if (itags != skip.tags.end()) {
+									for (auto t : itags->second) {
+										formatter.tag(tmp, t);
+									}
+								}
+							}
 						}
 
 						result += formatter.decorate(Decoration::generic_bold, tmp);
@@ -2290,6 +2361,18 @@ struct FormatDemangle<nested_name> {
 						if ((i + 1 == v.size() and p->type != template_args)
 						    or ((i + 2 == v.size()) and v.back()->type == template_args)) {
 							tmp = formatter.link_to(res, tmp, subs, tp);
+
+							if (not skip.tags.empty()) {
+								auto bare_res = restore_substitutions_and_template_params(res, subs, tp);
+								auto man = format_mangled(bare_res);
+								auto itags = skip.tags.find(man);
+
+								if (itags != skip.tags.end()) {
+									for (auto t : itags->second) {
+										formatter.tag(tmp, t);
+									}
+								}
+							}
 						}
 						result += tmp;
 					}
@@ -5372,13 +5455,6 @@ struct ItaniumHighlightLinker {
 using ItaniumXmlFormatter = Formatter<XmlDecorator, XmlEscaper, ItaniumXmlLinker>;
 using HighlightLightLinkFormatter = Formatter<HighlightDecorator<HighlightLight>, AsciiEscaper, ItaniumHighlightLinker<HighlightLight>>;
 using HighlightDarkLinkFormatter = Formatter<HighlightDecorator<HighlightDark>, AsciiEscaper, ItaniumHighlightLinker<HighlightDark>>;
-
-std::expected<std::string, ParseError> format_demangled_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix) {
-	ItaniumXmlFormatter formatter;
-	formatter.linker.prefix = prefix;
-	PackSelector ps;
-	return format_demangled(res, subs, tp, dv, formatter, ps, skip, max_recursion);
-}
 
 std::expected<HighlightedText<HighlightLight>, ParseError> format_demangled_link_light_high(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion) {
 	HighlightLightLinkFormatter formatter;

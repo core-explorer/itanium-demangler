@@ -1,11 +1,6 @@
 #include "FormatMangle.hxx"
-#include "Grammar.hxx"
-#include <format>
+#include "../util/format.hxx"
 #include <string>
-
-namespace fmt {
-using namespace std;
-}
 
 namespace swartalf::itanium {
 
