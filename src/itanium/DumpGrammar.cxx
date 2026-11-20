@@ -12,7 +12,7 @@
 
 namespace swartalf::itanium {
 namespace {
-std::array<std::string_view, 126> production_names = {
+std::array<std::string_view, 127> production_names = {
     "none",
     "unary_operator_name",
     "binary_operator_name",
@@ -139,7 +139,7 @@ std::array<std::string_view, 126> production_names = {
     "global_sub_for_mangled_name",
     "any_mangled_name",
     "overload_set",
-};
+    "constrained_friend"};
 }
 
 std::string_view to_string_view(ProductionType t) {

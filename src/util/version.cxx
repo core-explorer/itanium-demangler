@@ -1,7 +1,7 @@
 #include "version.hxx"
 
 namespace swartalf {
-std::string_view global_version_string = "0.0.32";
+std::string_view global_version_string = "0.0.33";
 std::string_view get_version_string() {
 	return global_version_string;
 }

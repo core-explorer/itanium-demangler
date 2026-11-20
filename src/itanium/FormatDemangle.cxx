@@ -4133,6 +4133,35 @@ struct FormatDemangle<requires_clause> {
 };
 
 template <>
+struct FormatDemangle<constrained_friend> {
+	template <typename Formatter>
+	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
+		if (max_recursion == 0) {
+			return std::unexpected(ParseError::recursion_reached);
+		}
+		--max_recursion;
+		for (const auto& c : res.comps) {
+			const auto* p = std::get_if<ParseResult>(&c);
+			if (p) {
+				auto tmp = format_demangled(*p, subs, tp, dv, formatter, ps, skip, max_recursion);
+				if (not tmp) {
+					return tmp;
+				}
+				if (dv.hide_abi_suffix) {
+					return tmp;
+				}
+				if (dv.compiler_dialect == CompilerDialect::clang) {
+					return formatter.decorate(Decoration::keyword, "friend") + " " + *tmp;
+				}
+				return *tmp + formatter.decorate(Decoration::noise, "[friend]");
+			}
+		}
+		using StringType = typename Formatter::value_type;
+		return StringType(make_error());
+	}
+};
+
+template <>
 struct FormatDemangle<expression> {
 	template <typename Formatter>
 	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector ps, const SkipSpec& skip, RecursionLimit max_recursion) {
@@ -5052,6 +5081,8 @@ std::expected<typename Formatter::value_type, ParseError> format_demangled(const
 		return format_demangledp<initializer>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case requirement:
 		return format_demangledp<requirement>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	case constrained_friend:
+		return format_demangledp<constrained_friend>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case type:
 	case builtin_type:
 	case qualified_type: {

@@ -129,6 +129,7 @@ enum class ProductionType : uint8_t {
 	global_sub_for_mangled_name,
 	any_mangled_name,
 	overload_set,
+	constrained_friend
 };
 
 std::string_view to_string_view(ProductionType);

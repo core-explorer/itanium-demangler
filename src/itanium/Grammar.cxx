@@ -41,6 +41,8 @@ void add_name_rules(ProductionGrammar& rules) {
 	rules.add_rule<unscoped_template_name>(substitution);
 
 	rules.add_rule<nested_name>("N", opt(explicit_object_member), opt(cv_qualifiers), opt(ref_qualifier), rep(prefix), unqualified_name, "E");
+	rules.add_rule<nested_name>("N", opt(explicit_object_member), opt(cv_qualifiers), opt(ref_qualifier), rep(prefix), constrained_friend, "E");
+	rules.add_rule<constrained_friend>("F", unqualified_name);
 	rules.add_rule<nested_name>("N", opt(explicit_object_member), opt(cv_qualifiers), opt(ref_qualifier), template_prefix, template_args, "E");
 
 	rules.add_rule<explicit_object_member>("H");
@@ -54,6 +56,8 @@ void add_name_rules(ProductionGrammar& rules) {
 
 	rules.add_rule<template_prefix>(unqualified_name);
 	rules.add_rule<template_prefix>(rep(prefix), unqualified_name);
+	rules.add_rule<template_prefix>(constrained_friend);
+	rules.add_rule<template_prefix>(rep(prefix), constrained_friend);
 	rules.add_rule<template_prefix>(template_param);
 	rules.add_rule<template_prefix>(substitution);
 
