@@ -16,15 +16,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils xz-utils rsync aria2
-      - name: Cache FreeBSD QCOW2 image
-        id: freebsd-cache
-        uses: actions/cache@v6
-        with:
-          path: freebsd.raw
-          key: freebsd-${{ env.FREEBSD_VER }}-${{ env.ARCH }}
 
       - name: Download and verify official FreeBSD BASIC-CI image
-        if: steps.freebsd-cache.outputs.cache-hit != 'true'
         run: |
           BASE_URL="https://download.freebsd.org/releases/CI-IMAGES/${FREEBSD_VER}/${ARCH}/Latest"
           IMG_NAME="FreeBSD-${FREEBSD_VER}-${ARCH}-BASIC-CI-ufs.raw"
