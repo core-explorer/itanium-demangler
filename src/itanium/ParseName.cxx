@@ -400,10 +400,12 @@ std::expected<ParseResult, ParseError> try_rule_nested_name(std::string_view inp
 		} else if (auto pfx = parse_as(remaining, prefix, max_recursion, indent, rules, false); pfx) {
 			remaining = remaining.substr(pfx->get_consumed_length());
 			names.emplace_back(std::move(*pfx));
-
 		} else if (auto targs = parse_as(remaining, template_args, max_recursion, indent, rules, false); targs) {
 			remaining = remaining.substr(targs->get_consumed_length());
 			names.emplace_back(std::move(*targs));
+		} else if (auto fuq = parse_as(remaining, constrained_friend, max_recursion, indent, rules, false); fuq) {
+			remaining = remaining.substr(fuq->get_consumed_length());
+			names.emplace_back(std::move(*fuq));
 		} else {
 			break;
 		}
@@ -425,7 +427,7 @@ std::expected<ParseResult, ParseError> try_rule_nested_name(std::string_view inp
 		return std::unexpected(ParseError::input_too_short);
 	}
 
-	if (remaining[0] == 'E' and names.back().type == unqualified_name) {
+	if (remaining[0] == 'E' and (names.back().type == unqualified_name or names.back().type == constrained_friend)) {
 		auto cnames = convert_names(std::move(names));
 		if (not cnames or cnames->size() < 2) {
 			return std::unexpected(cnames.error());
