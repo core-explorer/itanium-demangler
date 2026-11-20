@@ -14,6 +14,8 @@ NATIVE_TARGET=$(uname -m)
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)/bld
 TOOLCHAIN_GCC="Toolchain-gcc.cmake"
 TOOLCHAIN_CLANG="Toolchain-clang.cmake"
+TOOLCHAIN_CLANG_STATIC="Toolchain-clang-static.cmake"
+TOOLCHAIN_DARWIN="Toolchain-darwin.cmake"
 TOOLCHAIN_AFL="Toolchain-afl.cmake"
 TOOLCHAIN_WASM32="Toolchain-wasm32.cmake"
 TOOLCHAIN_WASM64="Toolchain-wasm64.cmake"
@@ -22,11 +24,20 @@ TARGET_PROCESSOR=$NATIVE_TARGET
 
 # DEFAULT PARAMETERS
 if [ -z ${CDX_BUILD_THREADS+x} ]; then
-  CDX_BUILD_THREADS=$(($(nproc) * 3 / 4))
+  NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+  CDX_BUILD_THREADS=$(($NPROC * 3 / 4))
 fi
 THREADS=$CDX_BUILD_THREADS
 BUILD_TYPE=RelWithDebInfo
+
+if [ "$(uname -s)" = "Darwin" ]; then
+TOOLCHAIN_FILE=$TOOLCHAIN_DARWIN
+elif [ "$(uname -s)" = "FreeBSD" ]; then
+TOOLCHAIN_FILE=$TOOLCHAIN_CLANG
+else
 TOOLCHAIN_FILE=$TOOLCHAIN_GCC
+fi
+
 TARGET=$NATIVE_TARGET
 LTO_FLAGS=""
 VERBOSE=
@@ -125,6 +136,10 @@ CDX_parse_default_parameter() {
     -c | --clang)
       TOOLCHAIN_FILE=$TOOLCHAIN_CLANG
       BUILDSUFFIX_PARTS="${BUILDSUFFIX_PARTS} clang"
+      ;;
+    --static)
+      TOOLCHAIN_FILE=$TOOLCHAIN_CLANG_STATIC
+      BUILDSUFFIX_PARTS="${BUILDSUFFIX_PARTS} static"
       ;;
     --afl)
       TOOLCHAIN_FILE=$TOOLCHAIN_AFL

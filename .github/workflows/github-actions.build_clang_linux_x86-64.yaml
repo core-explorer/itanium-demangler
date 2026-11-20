@@ -1,12 +1,14 @@
 name: Test building
 run-name: test building clang
-on: [push]
+on: [push, pull_request]
+
 jobs:
-  Github-Actions-Build-Clang:
+  build:
     runs-on: ubuntu-26.04
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
       - name: Compile with clang
         run: |
           cd ${{ github.workspace }}
@@ -16,4 +18,5 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           readelf --wide -s ./target/x86_64-Debug-clang/itanium-demangle | grep -v Ut_C2 | ./target/x86_64-Debug-clang/itanium-demangle --check
+
       - run: echo "job status ${{ job.status }}."

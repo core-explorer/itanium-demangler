@@ -1,3 +1,8 @@
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+# triggers on std::expected temporaries
+  set_source_files_properties(FormatDemangle.cxx PROPERTIES COMPILE_FLAGS " -Wno-error=maybe-uninitialized")
+endif()
+
 add_library(swartalf-demangle-itaniumlib OBJECT
 DemangleBasicType.cxx
 DumpGrammar.cxx

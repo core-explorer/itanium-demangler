@@ -1,6 +1,6 @@
 A demangler for the C++ Itanium ABI.
 
-No dependencies besides the C++23 standard library.
+No dependencies besides the C++23 standard library (may optionally use [fmt](https://github.com/fmtlib/fmt) instead of `std::format`).
 
 Available as a command line tool or compiled to web assembly for a web browser ([https://core-explorer.github.io/itanium-demangler/](https://core-explorer.github.io/itanium-demangler/)).
 

@@ -1,14 +1,37 @@
 name: Test building
 run-name: test building gcc aarch64
-on: [push]
+on: [push, pull_request]
+
 jobs:
-  Github-Actions-Build-aarch64:
+  build:
     runs-on: ubuntu-26.04-arm
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
       - name: Compile with gcc
         run: |
           cd ${{ github.workspace }}
-          ./compile.sh -d
+          ./compile.sh
+
       - run: echo "job status ${{ job.status }}."
+      - name: package dwarf and strip binary
+        run: |
+          cd ${{ github.workspace }}
+          objcopy --only-keep-debug target/aarch64-RelWithDebInfo/itanium-demangle target/aarch64-RelWithDebInfo/itanium-demangle.debug
+          strip --strip-debug target/aarch64-RelWithDebInfo/itanium-demangle
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-gcc-aarch64
+          path: target/aarch64-RelWithDebInfo/itanium-demangle
+          if-no-files-found: error
+
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-gcc-aarch64-dsym
+          path: target/aarch64-RelWithDebInfo/itanium-demangle.debug
+          if-no-files-found: error
+

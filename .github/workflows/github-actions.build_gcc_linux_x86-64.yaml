@@ -1,14 +1,37 @@
 name: Test building
-run-name: test building gcc
-on: [push]
+run-name: test building gcc x86_64
+on: [push, pull_request]
+
 jobs:
-  Github-Actions-Blackbox-Testing:
+  build:
     runs-on: ubuntu-26.04
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
       - name: Compile with gcc
         run: |
           cd ${{ github.workspace }}
-          ./compile.sh -r --lto
+          ./compile.sh --lto
+
       - run: echo "job status ${{ job.status }}."
+      - name: package dwarf and strip binary
+        run: |
+          cd ${{ github.workspace }}
+          objcopy --only-keep-debug target/latest/itanium-demangle target/latest/itanium-demangle.debug
+          strip target/latest/itanium-demangle
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-gcc-x86_64
+          path: target/x86_64-RelWithDebInfo-lto/itanium-demangle
+          if-no-files-found: error
+
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-gcc-x86_64-dsym
+          path: target/x86_64-RelWithDebInfo-lto/itanium-demangle.debug
+          if-no-files-found: error
+
