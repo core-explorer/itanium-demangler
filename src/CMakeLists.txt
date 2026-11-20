@@ -38,7 +38,6 @@ function(settings target)
     set_property(TARGET ${target} PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET ${target} PROPERTY UNITY_BUILD ${CALEIDO_ENABLE_UNITY})    
 
-    target_include_directories(${target} PUBLIC ${LIBELF_INCLUDE_DIR})
 endfunction()
 
 function(create_header_test name)
@@ -46,23 +45,12 @@ function(create_header_test name)
     set(test_name "${name_without_extension}_test")
     set(test_file "${CMAKE_CURRENT_BINARY_DIR}/header_test/${test_name}.cxx")
     file(WRITE ${test_file} "#include \"${name}\"\n")
-    endfunction()
-
-add_compile_definitions(SWARTALF_ENABLE_ELF32=1)
-
-
+endfunction()
 
 add_subdirectory(cli)
-
 add_subdirectory(itanium)
-#add_subdirectory(swartalf)
 add_subdirectory(util)
 add_subdirectory(web)
-
-if(NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "Emscripten")
-
-	#add_subdirectory(dbgfind)
-endif()
 
 set(HEADERS)
 set(HEADER_TESTS)

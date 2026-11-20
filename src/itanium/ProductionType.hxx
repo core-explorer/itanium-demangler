@@ -11,7 +11,7 @@ enum class ProductionType : uint8_t {
 	mangled_name,
 	encoding,
 	data_encoding,
-	vendor_specfic_suffix,
+	vendor_specific_suffix,
 	bare_function_type,
 	special_object,
 	name,

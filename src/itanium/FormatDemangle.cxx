@@ -3154,7 +3154,7 @@ struct FormatDemangle<operator_name> {
 };
 
 template <>
-struct FormatDemangle<vendor_specfic_suffix> {
+struct FormatDemangle<vendor_specific_suffix> {
 	template <typename Formatter>
 	static std::expected<typename Formatter::value_type, ParseError> form(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, Formatter& formatter, PackSelector, const SkipSpec&, RecursionLimit) {
 		const auto* l = std::get_if<std::string_view>(res.comps.data());
@@ -5053,8 +5053,8 @@ std::expected<typename Formatter::value_type, ParseError> format_demangled(const
 		return format_demangledp<conversion_operator_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case lambda_sig:
 		return format_demangledp<lambda_sig>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
-	case vendor_specfic_suffix:
-		return format_demangledp<vendor_specfic_suffix>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
+	case vendor_specific_suffix:
+		return format_demangledp<vendor_specific_suffix>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case mangled_name:
 		return format_demangledp<mangled_name>(res, subs, tp, dv, formatter, ps, skip, max_recursion);
 	case unnamed_type_name:

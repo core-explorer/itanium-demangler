@@ -21,7 +21,7 @@ std::array<std::string_view, 126> production_names = {
     "mangled_name",
     "encoding",
     "data_encoding",
-    "vendor_specfic_suffix",
+    "vendor_specific_suffix",
     "bare_function_type",
     "special_object",
     "name",

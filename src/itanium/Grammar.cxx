@@ -8,7 +8,7 @@ namespace {
 using enum ProductionType;
 
 void add_rules(ProductionGrammar& rules) {
-	rules.add_rule<dot_vendor_specific_suffix>(".", vendor_specfic_suffix);
+	rules.add_rule<dot_vendor_specific_suffix>(".", vendor_specific_suffix);
 	rules.add_rule<mangled_name>("_Z", encoding, opt(dot_vendor_specific_suffix));
 	rules.add_rule<mangled_name>("_Z", data_encoding);
 	rules.add_rule<mangled_name_apple>("_", mangled_name);
@@ -515,7 +515,7 @@ ProductionGrammar build_grammar() {
 	rules.add_rule<digit>(CharRange('0', '9'));
 	rules.add_rule<seq_id>(rep(CharRanges(CharRange('0', '9'), CharRange('A', 'Z'))));
 
-	rules.add_rule<vendor_specfic_suffix>(rep(CharRanges({'0', '9'}, {'A', 'Z'}, '_', '.')));
+	rules.add_rule<vendor_specific_suffix>(rep(CharRanges({'0', '9'}, {'A', 'Z'}, '_', '.')));
 	rules.add_rule<identifier>(rep(CharRanges({'0', '9'}, {'A', 'Z'}, '_', '.', '$')));
 
 	rules.lookup = optimize(rules);

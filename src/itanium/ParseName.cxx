@@ -669,7 +669,7 @@ std::expected<ParseResult, ParseError> try_rule(std::string_view input, Producti
 	if (input.starts_with('E')) {
 		return std::unexpected(ParseError::mismatched_literal);
 	}
-	if (type == vendor_specfic_suffix) {
+	if (type == vendor_specific_suffix) {
 		ParseResult result;
 		result.type = type;
 		result.comps.emplace_back(input);
