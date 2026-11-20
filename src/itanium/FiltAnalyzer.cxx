@@ -8,6 +8,7 @@
 #include "ParseName.hxx"
 #include "ParseResult.hxx"
 #include "RelativeDemangle.hxx"
+#include "ResolveSubstitution.hxx"
 #include "../cli/cli_color.hxx"
 #include "../util/print.hxx"
 #include "../util/split.hxx"

@@ -1,5 +1,6 @@
 #pragma once
 #include "ParseResult.hxx"
+#include "SubstitutionTable.hxx"
 #include <expected>
 namespace swartalf::itanium {
 enum class ReturnSignature : uint8_t {
@@ -17,6 +18,6 @@ struct FunctionClassification {
 enum class ClassifyEncodingError : uint8_t {
 	error
 };
-std::expected<FunctionClassification, ClassifyEncodingError> classify_encoding(const ParseResult& res);
-std::expected<FunctionClassification, ClassifyEncodingError> classify_name(const ParseResult& res);
+std::expected<FunctionClassification, ClassifyEncodingError> classify_encoding(const ParseResult& res, const SubstitutionTableView& subs);
+std::expected<FunctionClassification, ClassifyEncodingError> classify_name(const ParseResult& res, const SubstitutionTableView& subs);
 }

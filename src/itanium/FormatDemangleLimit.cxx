@@ -45,7 +45,7 @@ unsigned count_template_args(const ParseResult& res, const SubstitutionTableView
 std::pair<unsigned, unsigned> get_max_num_function_and_template_parameters(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, RecursionLimit max_recursion) {
 	std::pair<unsigned, unsigned> ftp = {0, 0};
 	if (res.type == ProductionType::encoding) {
-		auto efc = classify_encoding(res);
+		auto efc = classify_encoding(res, subs);
 		if (not efc) {
 			return {0, 0};
 		}

@@ -53,9 +53,6 @@ std::expected<std::string, ParseError> format_demangled_html_dark(const ParseRes
 
 std::expected<std::string, ParseError> format_demangled_html(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, const DemanglingDialect& dv, const SkipSpec& skip, RecursionLimit max_recursion, std::string_view prefix);
 
-const ParseResult* resolve_template_param(const ParseResult& res, const NestedTemplateParams& tp);
-std::tuple<const ParseResult*, SubstitutionTableView, const NestedTemplateParams*> resolve_substitution(const ParseResult& res, const SubstitutionTableView& subs);
-
 ParseResult restore_substitutions(const ParseResult& r, const SubstitutionTableView& subs);
 ParseResult restore_substitutions_and_template_params(const ParseResult& r, const SubstitutionTableView& subs, const NestedTemplateParams& tp);
 std::optional<int> get_pack_size(const ParseResult& res, const SubstitutionTableView& subs, const NestedTemplateParams& tp, RecursionLimit max_recursion);

@@ -16,6 +16,7 @@ OptimizedGrammar.cxx
 Parsed.cxx
 ParseName.cxx
 RelativeDemangle.cxx
+ResolveSubstitution.cxx
 SubstitutionTable.cxx
 )
 
