@@ -1,0 +1,37 @@
+name: Test building
+run-name: test building macos
+on: [push]
+jobs:
+  Github-Actions-Build-macos-aarch64:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v7
+      - name: Compile with apple-clang
+        run: |
+          cd ${{ github.workspace }}
+          ./compile.sh
+      - name: test against llvm-demangler
+        run: |
+          set -euo pipefail
+          cd ${{ github.workspace }}
+          nm -pa ./target/latest/itanium-demangle | grep -v Ut_C2 | ./target/latest/itanium-demangle --check
+      - name: package dwarf and strip binary
+        run: |
+          cd ${{ github.workspace }}
+          dsymutil target/arm64-RelWithDebInfo/itanium-demangle -o target/arm64-RelWithDebInfo/itanium-demangle.dSYM
+          strip -S target/arm64-RelWithDebInfo/itanium-demangle
+      - run: echo "job status ${{ job.status }}."
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-macos-arm64
+          path: target/arm64-RelWithDebInfo/itanium-demangle
+          if-no-files-found: error
+
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-macos-arm64-dsym
+          path: target/arm64-RelWithDebInfo/itanium-demangle.dSYM
+          if-no-files-found: error

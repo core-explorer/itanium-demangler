@@ -1,0 +1,110 @@
+name: Test building
+run-name: test building freebsd
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FREEBSD_VER: "15.1-RELEASE"
+      ARCH: "amd64"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install QEMU and utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils xz-utils rsync aria2
+      - name: Cache FreeBSD QCOW2 image
+        id: freebsd-cache
+        uses: actions/cache@v6
+        with:
+          path: freebsd.raw
+          key: freebsd-${{ env.FREEBSD_VER }}-${{ env.ARCH }}
+
+      - name: Download and verify official FreeBSD BASIC-CI image
+        if: steps.freebsd-cache.outputs.cache-hit != 'true'
+        run: |
+          BASE_URL="https://download.freebsd.org/releases/CI-IMAGES/${FREEBSD_VER}/${ARCH}/Latest"
+          IMG_NAME="FreeBSD-${FREEBSD_VER}-${ARCH}-BASIC-CI-ufs.raw"
+
+          aria2c -x 16 -s 16 -k 1M --console-log-level=warn "${BASE_URL}/${IMG_NAME}.xz"
+          curl -fL --retry 5 --retry-delay 3 --connect-timeout 15 --max-time 300 -O "${BASE_URL}/CHECKSUM.SHA256"
+
+          # Verify integrity against official FreeBSD checksums
+          grep "${IMG_NAME}.xz" CHECKSUM.SHA256 | sha256sum -c -
+
+          unxz "${IMG_NAME}.xz"
+          mv "${IMG_NAME}" freebsd.raw
+
+          qemu-img resize freebsd.raw 10G
+
+      - name: Compile with clang
+        run: |
+          sudo chmod 666 /dev/kvm
+          # Start QEMU in the background with KVM and port-forwarded SSH (host 2222 -> guest 22)
+          qemu-system-x86_64 \
+            -machine q35,accel=kvm \
+            -cpu host \
+            -smp $(nproc) \
+            -m 4096 \
+            -drive file=freebsd.raw,format=raw,if=virtio \
+            -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+            -device virtio-net-pci,netdev=net0 \
+            -nographic \
+            -serial mon:stdio > qemu.log 2>&1 &
+
+          QEMU_PID=$!
+          trap "kill $QEMU_PID 2>/dev/null || true" EXIT
+
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222"
+
+          # Wait for SSH to come up inside the guest
+          echo "Waiting for FreeBSD VM to boot..."
+          for i in $(seq 1 30); do
+            if ssh $SSH_OPTS root@localhost "echo ready" >/dev/null 2>&1; then
+              echo "VM is ready!"
+              break
+            fi
+            sleep 2
+            if [ "$i" -eq 30 ]; then
+              echo "Timed out waiting for VM. Console log:"
+              cat qemu.log
+              exit 1
+            fi
+          done
+
+          ssh $SSH_OPTS root@localhost "service growfs onestart && pkg install -y rsync git gmake cmake"
+          rsync -az --exclude='freebsd.raw' --exclude='qemu.log' -e "ssh $SSH_OPTS" ./ root@localhost:/root/work/
+
+          ssh $SSH_OPTS root@localhost << 'EOF'
+            set -e
+            cd /root/work
+            uname -a
+
+            ./compile.sh
+          EOF
+
+          rsync -az -e "ssh $SSH_OPTS" root@localhost:/root/work/target/ ./target/
+      - run: echo "job status ${{ job.status }}."
+      - name: package dwarf and strip binary
+        run: |
+          cd ${{ github.workspace }}
+          objcopy --only-keep-debug target/amd64-RelWithDebInfo/itanium-demangle target/amd64-RelWithDebInfo/itanium-demangle.debug
+          strip --strip-debug target/amd64-RelWithDebInfo/itanium-demangle
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-freebsd-amd64
+          path: target/amd64-RelWithDebInfo/itanium-demangle
+          if-no-files-found: error
+
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-freebsd-amd64-dsym
+          path: target/amd64-RelWithDebInfo/itanium-demangle.debug
+          if-no-files-found: error
+

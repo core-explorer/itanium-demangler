@@ -1,0 +1,39 @@
+name: Test building
+run-name: test building alpine linux
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build and test inside Alpine
+        run: |
+          podman run --rm \
+            -v "${{ github.workspace }}:/workspace:Z" \
+            -w /workspace \
+            docker.io/library/alpine:latest \
+            sh -c "apk add --no-cache build-base clang musl-dev lld llvm libc++-dev libc++-static llvm-libunwind-dev llvm-libunwind-static compiler-rt cmake fmt-dev && ./compile.sh --static --msr --lto"
+      - run: echo "job status ${{ job.status }}."
+      - name: package dwarf and strip binary
+        run: |
+          cd ${{ github.workspace }}
+          objcopy --only-keep-debug target/latest/itanium-demangle target/latest/itanium-demangle.debug
+          strip target/latest/itanium-demangle
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-alpine-amd64
+          path: target/x86_64-MinSizeRel-lto-static/itanium-demangle
+          if-no-files-found: error
+
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v7
+        with:
+          name: itanium-demangle-alpine-amd64-dsym
+          path: target/x86_64-MinSizeRel-lto-static/itanium-demangle.debug
+          if-no-files-found: error
+

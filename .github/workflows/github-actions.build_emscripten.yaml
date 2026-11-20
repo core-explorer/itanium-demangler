@@ -1,15 +1,18 @@
 name: Test building
 run-name: test building emscripten
-on: [push]
+on: [push, pull_request]
+
 jobs:
-  Github-Actions-Build-Emscripten:
+  build:
     runs-on: ubuntu-26.04
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
       - name: Compile with emscripten
         run: |
           cd ${{ github.workspace }}
           sudo apt-get install emscripten
           ./compile.sh --web --msr --lto
+
       - run: echo "job status ${{ job.status }}."
